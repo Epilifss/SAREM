@@ -10,7 +10,7 @@ class Header:
     def __init__(self, parent, user, caller_id=None, tree=None):
         self.user = user
         self.parent = parent
-        from telas import Embarcados, Estatisticas
+        from telas import Embarcados, Estatisticas, Relatorios
 
         self.ultimo_modulo = caller_id
         self.tree = tree
@@ -19,10 +19,11 @@ class Header:
         header.pack(fill=tk.X)
 
         ttk.Button(header, text="Embarcados", command=lambda: Embarcados(
-            user, caller_id=self.ultimo_modulo)).pack(side=tk.LEFT)
+            parent, caller_id=self.ultimo_modulo)).pack(side=tk.LEFT)
         ttk.Button(header, text="Estatísticas", command=lambda: Estatisticas(
-            user, caller_id=self.ultimo_modulo)).pack(side=tk.LEFT)
-        ttk.Button(header, text="Gerar Relatório").pack(side=tk.LEFT)
+            parent, caller_id=self.ultimo_modulo)).pack(side=tk.LEFT)
+        ttk.Button(header, text="Gerar Relatório", command=lambda: Relatorios(
+            parent, caller_id=self.ultimo_modulo)).pack(side=tk.LEFT)
         ttk.Button(header, text="Logoff",
                    command=self.logoff).pack(side=tk.RIGHT)
         ttk.Button(header, text="Atualizar",
@@ -68,6 +69,7 @@ class Header:
         self.parent.destroy()
         from telas import LoginWindow
         LoginWindow()
+        
 
     def buscar_bo(self):
         from telas import buscarBo

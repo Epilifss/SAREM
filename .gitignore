@@ -20,6 +20,7 @@ dist/
 
 # Arquivos de configuração específicos do ambiente
 *.env
+*.ini
 
 # Arquivos de cache
 *.cache
@@ -34,4 +35,7 @@ dist/
 # Outros arquivos específicos do projeto
 icon.ico
 make_executable.py
+instalador.iss
+msodbcsql.msi
 main.spec
+/installer/

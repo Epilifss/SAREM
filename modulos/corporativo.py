@@ -5,6 +5,11 @@ from telas import *
 from components import *
 from database import create_connection
 
+def resource_path(relative_path):
+    """Retorna o caminho absoluto para o recurso, funciona para dev e PyInstaller."""
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.abspath("."), relative_path)
 
 class CorporativoModule:
     instance = None # Var de class que armazena a instância atual
@@ -12,11 +17,14 @@ class CorporativoModule:
     def __init__(self, user):
         self.user = user
         self.root = tk.Tk()
-        self.root.title("Módulo Corporativo")
-
+        self.root.title("SAREM - Módulo Corporativo")
         self.root.state('zoomed')
 
+        self.root.iconbitmap(resource_path('images/SAREM.ico'))  # Define o ícone da janela
+
         CorporativoModule.instance = self
+
+        from telas import exibir_detalhes_acompanhando
 
         # Lista de BOs
         self.tree = ttk.Treeview(self.root, columns=(
@@ -27,6 +35,9 @@ class CorporativoModule:
         self.tree.heading("tipo_ocorrencia", text="Tipo de Ocorrência")
         self.tree.heading("setor_responsavel", text="Setor Responsável")
         self.tree.heading("motivo", text="Motivo")
+
+        self.tree.bind("<Double-1>", lambda event: exibir_detalhes_acompanhando(self.root,
+                       self.tree, caller_id="Corporativo"))
 
         # Cabeçalho
         self.header = Header(self.root, self.user, caller_id="Corporativo", tree=self.tree)
@@ -58,7 +69,7 @@ class CorporativoModule:
         try:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT bo_number, op, status, tipo_ocorrencia, motivo FROM bo_records WHERE modulo LIKE 'corporativo' AND status NOT LIKE 'Embarcado' AND bo_number LIKE ?", (f"%{termo}%",))
+                "SELECT bo_number, op, status, tipo_ocorrencia, setor_responsavel, motivo FROM bo_records WHERE modulo LIKE 'corporativo' AND status NOT LIKE 'Embarcado' AND bo_number LIKE ?", (f"%{termo}%",))
             rows = cursor.fetchall()
 
             self.tree.delete(*self.tree.get_children())
@@ -70,11 +81,13 @@ class CorporativoModule:
                     "(' ,)") if row[2] is not None else ""
                 tipo_ocorrencia = str(row[3]).strip(
                     "(' ,)") if row[3] is not None else ""
-                motivo = str(row[4]).strip(
+                setor_responsavel = str(row[4]).strip(
                     "(' ,)") if row[4] is not None else ""
+                motivo = str(row[5]).strip(
+                    "(' ,)") if row[5] is not None else ""
 
                 self.tree.insert("", tk.END, values=(
-                    bo, op, status, tipo_ocorrencia, motivo))
+                    bo, op, status, tipo_ocorrencia, setor_responsavel, motivo))
         except pyodbc.Error as e:
             messagebox.showerror("Erro", f"Erro ao pesquisar BOs: {e}")
         finally:
@@ -85,4 +98,4 @@ class CorporativoModule:
     def clear_search(self):
         self.search_bar.search_entry.delete(0, tk.END)
         self.search_bar.update_buttons()  # Atualiza os botões após limpar
-        self.carregar_bos()  # Recarrega os BOs
+        self.header.carregar_bos()  # Recarrega os BOs

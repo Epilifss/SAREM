@@ -1,6 +1,4 @@
 from telas import *
-from database import create_connection
 
-
-class LoginWindow:
+if __name__ == "__main__":
     LoginWindow()
