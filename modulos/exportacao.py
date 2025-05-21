@@ -11,18 +11,18 @@ def resource_path(relative_path):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.abspath("."), relative_path)
 
-class CorporativoModule:
+class ExportacaoModule:
     instance = None # Var de class que armazena a instância atual
 
     def __init__(self, user):
         self.user = user
         self.root = tk.Tk()
-        self.root.title("SAREM - Módulo Corporativo")
+        self.root.title("SAREM - Módulo Exportação")
         self.root.state('zoomed')
 
         self.root.iconbitmap(resource_path('SAREM.ico'))  # Define o ícone da janela
 
-        CorporativoModule.instance = self
+        ExportacaoModule.instance = self
 
         from telas import exibir_detalhes_acompanhando
 
@@ -37,10 +37,10 @@ class CorporativoModule:
         self.tree.heading("motivo", text="Motivo")
 
         self.tree.bind("<Double-1>", lambda event: exibir_detalhes_acompanhando(self.root,
-                       self.tree, caller_id="Corporativo"))
+                       self.tree, caller_id="Exportacao"))
 
         # Cabeçalho
-        self.header = Header(self.root, self.user, caller_id="Corporativo", tree=self.tree)
+        self.header = Header(self.root, self.user, caller_id="Exportacao", tree=self.tree)
 
         # Barra de pesquisa
         self.search_bar = SearchBar(self.root, self.pesquisar_bo, self.clear_search)
@@ -69,7 +69,7 @@ class CorporativoModule:
         try:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT bo_number, op, status, tipo_ocorrencia, setor_responsavel, motivo FROM bo_records WHERE modulo LIKE 'corporativo' AND status NOT LIKE 'Embarcado' AND bo_number LIKE ?", (f"%{termo}%",))
+                "SELECT bo_number, op, status, tipo_ocorrencia, setor_responsavel, motivo FROM bo_records WHERE modulo LIKE 'exportacao' AND status NOT LIKE 'Embarcado' AND bo_number LIKE ?", (f"%{termo}%",))
             rows = cursor.fetchall()
 
             self.tree.delete(*self.tree.get_children())

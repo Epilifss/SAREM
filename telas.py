@@ -11,6 +11,7 @@ import tempfile
 import datetime
 import matplotlib.pyplot as plt
 import pandas as pd
+import configparser
 from moviepy import VideoFileClip
 from PIL import Image, ImageTk
 from matplotlib.figure import Figure
@@ -28,9 +29,10 @@ from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
 from textwrap import wrap
 from modulos.corporativo import CorporativoModule
 from modulos.varejo import VarejoModule
+from modulos.exportacao import ExportacaoModule
 # from modulos.exportacao import ExportacaoModule
 from components import *
-from database import create_connection_mikonos
+from database import create_connection_Protheus
 from database import create_connection
 
 def resource_path(relative_path):
@@ -38,6 +40,54 @@ def resource_path(relative_path):
     if hasattr(sys, '_MEIPASS'):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.abspath("."), relative_path)
+
+def monitorar_bo_embarcadas():
+    def tarefa():
+        while True:
+            try:
+                horario = datetime.datetime.now()
+                hora = (f"as {horario.hour}:{horario.minute}")
+
+                print("Monitorando BOs embarcadas " + hora)
+                conn = create_connection()
+                conn_Protheus = create_connection_Protheus()
+                if conn is None or conn_Protheus is None:
+                    print("Erro de conexão com o banco.")
+                    time.sleep(60)
+                    continue
+
+                cursor = conn.cursor()
+                cursor.execute("SELECT bo_number, op FROM bo_records WHERE status <> 'Embarcado'")
+                bos = cursor.fetchall()
+
+                for bo_number, op in bos:
+                    cursor_mik = conn_Protheus.cursor()
+                    cursor_mik.execute("""
+                        SELECT COUNT(*) FROM SC6010
+                        WHERE C6_NUM = ? AND C6_BLQ = '' AND D_E_L_E_T_ <> '*'
+                    """, str(op))
+                    total_itens = cursor_mik.fetchone()[0]
+
+                    cursor_mik.execute("""
+                        SELECT COUNT(*) FROM SC6010
+                        WHERE C6_NUM = ? AND C6_BLQ = '' AND D_E_L_E_T_ <> '*' AND C6_NOTA <> ''
+                    """, str(op))
+                    itens_com_nota = cursor_mik.fetchone()[0]
+                    cursor_mik.close()
+
+                    if total_itens > 0 and total_itens == itens_com_nota:
+                        cursor.execute("UPDATE bo_records SET status = 'Embarcado' WHERE bo_number = ?", bo_number)
+                        conn.commit()
+                        print(f"BO {bo_number} marcada como Embarcada.")
+
+                cursor.close()
+                conn.close()
+                conn_Protheus.close()
+            except Exception as e:
+                print(f"Erro ao monitorar BOs embarcadas: {e}")
+            time.sleep(60)
+
+    threading.Thread(target=tarefa, daemon=True).start()
 
 def center_window(self):
         self.root.update_idletasks()
@@ -50,7 +100,6 @@ def center_window(self):
         self.root.geometry(f"{width}x{height}+{x}+{y}")
 
 def center_window_child(child, parent):
-    # Centraliza a janela filha em relação à janela pai
     child.update_idletasks()
     width = child.winfo_width()
     height = child.winfo_height()
@@ -66,29 +115,128 @@ def center_window_child(child, parent):
 class TreeViewHelper:
     def ajustar_colunas(self):
         for col in self.tree["columns"]:
-            # Obtém os valores da coluna e o nome da coluna
             valores = [self.tree.set(item, col) for item in self.tree.get_children()]
-            valores.append(col)  # Inclui o nome da coluna para calcular a largura mínima
 
-            # Calcula a largura máxima
             max_largura = max(len(str(valor)) for valor in valores)
 
-            # Define a largura da coluna
-            self.tree.column(col, width=max_largura * 10)  # Multiplica por 10 para ajustar o tamanho visual
+            self.tree.column(col, width=max_largura * 10) 
+
+def get_config_path():
+    appdata = os.environ.get('APPDATA') or os.path.expanduser('~')
+    config_dir = os.path.join(appdata, 'SAREM')
+    os.makedirs(config_dir, exist_ok=True)
+    return os.path.join(config_dir, 'config.ini')
+
+CONFIG_PATH = get_config_path()
+
+class ConfigEditor:
+    def __init__(self, parent_login=None):
+        self.parent_login = parent_login
+        self.root = tk.Tk()
+        self.root.title("Configuração do Banco de Dados")
+        self.root.iconbitmap(resource_path('SAREM.ico'))
+        self.root.minsize(400, 300)
+        self.root.resizable(False, False)
+        self.root.focus_set()
+
+        self.config = configparser.ConfigParser()
+        self.config.read(CONFIG_PATH)
+        with open(CONFIG_PATH, "w") as configfile:
+            self.config.write(configfile)
+
+        # Campos para o banco principal
+        campos_db = [
+            ("server", "Servidor"),
+            ("database", "Banco de Dados"),
+            ("user", "Usuário"),
+            ("password", "Senha")
+        ]
+        # Campos para o Protheus
+        campos_prot = [
+            ("server", "Servidor"),
+            ("database", "Banco"),
+            ("user", "Usuário"),
+            ("password", "Senha")
+        ]
+        self.entries_db = {}
+        self.entries_mik = {}
+
+        frame = ttk.Frame(self.root, padding=20)
+        frame.pack(expand=True, fill=tk.BOTH)
+
+        ttk.Label(frame, text="Banco de Dados SAREM", font=("Arial", 10, "bold")).grid(row=0, column=0, columnspan=2, pady=(0, 10))
+        for i, (campo, label) in enumerate(campos_db):
+            ttk.Label(frame, text=label + ":").grid(row=i+1, column=0, sticky=tk.W, pady=5)
+            entry = ttk.Entry(frame, width=30, show="*" if campo == "password" else "")
+            entry.grid(row=i+1, column=1, pady=5)
+            self.entries_db[campo] = entry
+
+        ttk.Label(frame, text="Banco Protheus", font=("Arial", 10, "bold")).grid(row=len(campos_db)+1, column=0, columnspan=2, pady=(20, 10))
+        for i, (campo, label) in enumerate(campos_prot):
+            ttk.Label(frame, text=label + ":").grid(row=len(campos_db)+2+i, column=0, sticky=tk.W, pady=5)
+            entry = ttk.Entry(frame, width=30, show="*" if campo == "password" else "")
+            entry.grid(row=len(campos_db)+2+i, column=1, pady=5)
+            self.entries_mik[campo] = entry
+
+        # Carrega valores atuais
+        if "database" in self.config:
+            for campo in self.entries_db:
+                valor = self.config["database"].get(campo, "")
+                self.entries_db[campo].insert(0, valor)
+        if "Protheus" in self.config:
+            for campo in self.entries_mik:
+                valor = self.config["Protheus"].get(campo, "")
+                self.entries_mik[campo].insert(0, valor)
+
+        row_btn = len(campos_db) + len(campos_prot) + 2
+        ttk.Button(frame, text="Salvar", command=self.salvar).grid(row=row_btn, column=0, pady=15, sticky="ew")
+        ttk.Button(frame, text="Cancelar", command=self.cancelar).grid(row=row_btn, column=1, pady=15, sticky="ew")
+
+        center_window(self)
+        self.root.mainloop()
+
+    def cancelar(self):
+        self.root.destroy()
+        try:
+            if hasattr(self, 'parent_login') and self.parent_login:
+                self.parent_login.deiconify()
+        except Exception:
+            pass
+
+    def salvar(self):
+        if "database" not in self.config:
+            self.config["database"] = {}
+        if "Protheus" not in self.config:
+            self.config["Protheus"] = {}
+        for campo, entry in self.entries_db.items():
+            self.config["database"][campo] = entry.get()
+        for campo, entry in self.entries_mik.items():
+            self.config["Protheus"][campo] = entry.get()
+        try:
+            with open(CONFIG_PATH, "w") as configfile:
+                self.config.write(configfile)
+            messagebox.showinfo("Sucesso", "Configuração salva com sucesso!")
+            self.root.destroy()
+            try:
+                if hasattr(self, 'parent_login') and self.parent_login:
+                    self.parent_login.deiconify()
+            except Exception:
+                pass
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao salvar: {e}")
 
 class LoginWindow:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("SAREM")
-        self.root.iconbitmap(resource_path('images/SAREM.ico'))
+        self.root.iconbitmap(resource_path('SAREM.ico'))
         self.root.geometry("300x200")
         self.root.focus_set()
 
         self.frame = ttk.Frame(self.root, padding=10)
         self.frame.pack(expand=True)
 
-        # Adiciona a logo PNG do app
-        logo_img = Image.open(resource_path('images/SAREM PNG.png'))
+        logo_img = Image.open(resource_path('SAREM PNG.png'))
         logo_img = logo_img.resize((150, 50), Image.LANCZOS)
         self.logo_photo = ImageTk.PhotoImage(logo_img)
         ttk.Label(self.frame, image=self.logo_photo).grid(row=0, column=0, columnspan=2, pady=(0, 10))
@@ -106,16 +254,39 @@ class LoginWindow:
             self.frame, text="Login", command=self.login)
         self.login_btn.grid(row=3, column=0, columnspan=2, pady=5)
 
+        self.config_btn = ttk.Button(
+            self.frame, text="Configurar Banco", command=self.abrir_config)
+        self.config_btn.grid(row=4, column=0, columnspan=2, pady=5)
+
         center_window(self)
         self.username.focus_set()
         self.root.bind('<Return>', self.login)
         self.root.mainloop()
 
+    def abrir_config(self):
+        self.root.withdraw()
+        editor = ConfigEditor(self.root)
+        try:
+            self.root.deiconify()
+        except tk.TclError:
+            pass
+    
     def admin_login(self):
         self.username.delete(0, tk.END)
         self.password.delete(0, tk.END)
 
     def login(self, event=None):
+        config = configparser.ConfigParser()
+        config.read(CONFIG_PATH)
+        campos_obrigatorios = ["server", "database", "user", "password"]
+        if "database" not in config or any(not config["database"].get(campo, "").strip() for campo in campos_obrigatorios):
+            messagebox.showwarning(
+                "Configuração necessária",
+                "Preencha as configurações do banco de dados antes de fazer login."
+            )
+            self.abrir_config()
+            return
+
         username = self.username.get()
         password = self.password.get()
         hashed_pw = hashlib.sha256(password.encode()).hexdigest()
@@ -148,15 +319,18 @@ class LoginWindow:
                     if (module) == '0':
                         self.root.destroy()
                         print(printUser + "módulo Corporativo " + hora)
+                        monitorar_bo_embarcadas()
                         CorporativoModule(user)
                     elif (module) == '1':
                         self.root.destroy()
                         print(printUser + "módulo Varejo " + hora)
+                        monitorar_bo_embarcadas()
                         VarejoModule(user)
-                    # elif (module) == '2':
-                    #     self.root.destroy()
-                    #     print(printUser + "no módulo Exportação")
-                    #     ExportacaoModule(user)
+                    elif (module) == '2':
+                        self.root.destroy()
+                        print(printUser + "módulo Exportação " + hora)
+                        monitorar_bo_embarcadas()
+                        ExportacaoModule(user)
                     else:
                         messagebox.showerror(
                             "Erro", "Módulo do usuário não encontrado. Contate o administrador.")
@@ -175,7 +349,7 @@ class AdminPanel:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Painel de Administração")
-        self.root.iconbitmap(resource_path('images/SAREM.ico'))
+        self.root.iconbitmap(resource_path('SAREM.ico'))
 
         self.root.state('zoomed')
 
@@ -211,8 +385,9 @@ class AdminPanel:
         self.tree.bind("<<TreeviewSelect>>", self.atualizar_selecao)
 
         # Aba de Database
-        self.user_frame = ttk.Frame(self.notebook)
-        self.notebook.add(self.user_frame, text="Banco")
+        self.db_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.db_frame, text="Banco de Dados")
+        self.criar_formulario_db()
 
         self.notebook.pack(expand=True, fill=tk.BOTH)
         self.carregar_usuarios()
@@ -321,6 +496,85 @@ class AdminPanel:
         user_data = self.tree.item(selected_items[0], "values")
         EditarUsuarioWindow(self.root, self, user_data)
 
+    def criar_formulario_db(self):
+        CONFIG_PATH = get_config_path()
+        self.db_config = configparser.ConfigParser()
+        self.db_config.read(CONFIG_PATH)
+
+        campos_db = [
+            ("server", "Servidor"),
+            ("database", "Banco de Dados"),
+            ("user", "Usuário"),
+            ("password", "Senha")
+        ]
+        campos_prot = [
+            ("server", "Servidor"),
+            ("database", "Banco"),
+            ("user", "Usuário"),
+            ("password", "Senha")
+        ]
+        self.db_entries = {}
+        self.mik_entries = {}
+
+        frame = ttk.Frame(self.db_frame, padding=20)
+        frame.pack(expand=True, fill=tk.BOTH)
+
+        ttk.Label(frame, text="Banco de Dados SAREM", font=("Arial", 10, "bold")).grid(row=0, column=0, columnspan=2, pady=(0, 10))
+        for i, (campo, label) in enumerate(campos_db):
+            ttk.Label(frame, text=label + ":").grid(row=i+1, column=0, sticky=tk.W, pady=5)
+            entry = ttk.Entry(frame, width=30, show="*" if campo == "password" else "")
+            entry.grid(row=i+1, column=1, pady=5)
+            self.db_entries[campo] = entry
+
+        ttk.Label(frame, text="Banco Protheus", font=("Arial", 10, "bold")).grid(row=len(campos_db)+1, column=0, columnspan=2, pady=(20, 10))
+        for i, (campo, label) in enumerate(campos_prot):
+            ttk.Label(frame, text=label + ":").grid(row=len(campos_db)+2+i, column=0, sticky=tk.W, pady=5)
+            entry = ttk.Entry(frame, width=30, show="*" if campo == "password" else "")
+            entry.grid(row=len(campos_db)+2+i, column=1, pady=5)
+            self.mik_entries[campo] = entry
+
+        # Carrega valores atuais
+        if "database" in self.db_config:
+            for campo in self.db_entries:
+                valor = self.db_config["database"].get(campo, "")
+                self.db_entries[campo].insert(0, valor)
+        if "Protheus" in self.db_config:
+            for campo in self.mik_entries:
+                valor = self.db_config["Protheus"].get(campo, "")
+                self.mik_entries[campo].insert(0, valor)
+
+        row_btn = len(campos_db) + len(campos_prot) + 2
+        ttk.Button(frame, text="Salvar", command=self.salvar_config_db).grid(row=row_btn, column=0, pady=15, sticky="ew")
+        ttk.Button(frame, text="Cancelar", command=self.cancelar_config_db).grid(row=row_btn, column=1, pady=15, sticky="ew")
+
+    def salvar_config_db(self):
+        CONFIG_PATH = get_config_path()
+        if "database" not in self.db_config:
+            self.db_config["database"] = {}
+        if "Protheus" not in self.db_config:
+            self.db_config["Protheus"] = {}
+        for campo, entry in self.db_entries.items():
+            self.db_config["database"][campo] = entry.get()
+        for campo, entry in self.mik_entries.items():
+            self.db_config["Protheus"][campo] = entry.get()
+        try:
+            with open(CONFIG_PATH, "w") as configfile:
+                self.db_config.write(configfile)
+            messagebox.showinfo("Sucesso", "Configuração salva com sucesso!")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao salvar: {e}")
+
+    def cancelar_config_db(self):
+        # Apenas recarrega os valores do arquivo, desfazendo alterações não salvas
+        for campo, entry in self.db_entries.items():
+            entry.delete(0, tk.END)
+            valor = self.db_config["database"].get(campo, "")
+            entry.insert(0, valor)
+        for campo, entry in self.mik_entries.items():
+            entry.delete(0, tk.END)
+            valor = self.db_config["Protheus"].get(campo, "")
+            entry.insert(0, valor)
+
     def logoff(self):
         self.root.destroy()
         LoginWindow()
@@ -330,7 +584,7 @@ class NovoUsuarioWindow:
     def __init__(self, parent, admin_panel):
         self.root = tk.Toplevel(parent)
         self.root.title("Novo Usuário")
-        self.root.iconbitmap(resource_path('images/SAREM.ico'))
+        self.root.iconbitmap(resource_path('SAREM.ico'))
         self.root.grab_set()
         self.root.focus_set()
 
@@ -350,7 +604,7 @@ class NovoUsuarioWindow:
             row=i, column=0, sticky=tk.W, padx=10, pady=8
             )
             if campo == "Senha":
-                entry = ttk.Entry(content, values=["Sim", "Não"], state="readonly")
+                entry = ttk.Entry(content, show="*")
             elif campo == "Admin":
                 entry = ttk.Combobox(content, values=["Sim", "Não"], state="readonly")
             elif campo == "Módulo":
@@ -412,7 +666,7 @@ class EditarUsuarioWindow:
     def __init__(self, parent, admin_panel, user_data):
         self.root = tk.Toplevel(parent)
         self.root.title("Editar Usuário")
-        self.root.iconbitmap(resource_path('images/SAREM.ico'))
+        self.root.iconbitmap(resource_path('SAREM.ico'))
         self.root.grab_set()
         self.root.focus_set()
         self.admin_panel = admin_panel
@@ -511,7 +765,7 @@ class Embarcados(TreeViewHelper):
         self.parent = parent
         self.root = tk.Toplevel(parent)
         self.root.title("Embarcados")
-        self.root.iconbitmap(resource_path('images/SAREM.ico'))
+        self.root.iconbitmap(resource_path('SAREM.ico'))
         self.root.geometry("1000x600")
 
         self.root.transient(parent)
@@ -644,7 +898,7 @@ class Estatisticas:
         self.parent = parent
         self.root = tk.Toplevel(parent)
         self.root.title("Estatísticas")
-        self.root.iconbitmap(resource_path('images/SAREM.ico'))
+        self.root.iconbitmap(resource_path('SAREM.ico'))
         self.root.geometry("1000x600")
         self.root.state('zoomed')
 
@@ -768,7 +1022,7 @@ class Relatorios(TreeViewHelper):
         self.parent = parent
         self.root = tk.Toplevel(parent)
         self.root.title("Gerar Relatório")
-        self.root.iconbitmap(resource_path('images/SAREM.ico'))
+        self.root.iconbitmap(resource_path('SAREM.ico'))
         self.root.geometry("800x500")
         self.root.state('zoomed')
 
@@ -883,9 +1137,9 @@ class Relatorios(TreeViewHelper):
                 bo = str(row[1]).strip() if row[1] is not None else ""
                 op = str(row[2]).strip() if row[2] is not None else ""
                 cliente = str(row[3]).strip() if row[3] is not None else ""
-                tipo_ocorrencia = str(row[7]).strip() if row[7] is not None else ""
-                setor_responsavel = str(row[10]).strip() if row[10] is not None else ""
-                motivo = str(row[8]).strip() if row[8] is not None else ""
+                tipo_ocorrencia = str(row[5]).strip() if row[5] is not None else ""
+                setor_responsavel = str(row[8]).strip() if row[8] is not None else ""
+                motivo = str(row[6]).strip() if row[6] is not None else ""
 
                 self.tree.insert("", tk.END, values=(
                     bo, op, cliente, tipo_ocorrencia, setor_responsavel, motivo))
@@ -1113,7 +1367,7 @@ class buscarBo(TreeViewHelper):
         self.parent = parent
         self.root = tk.Toplevel(parent)
         self.root.title("Buscar BO")
-        self.root.iconbitmap(resource_path('images/SAREM.ico'))
+        self.root.iconbitmap(resource_path('SAREM.ico'))
         self.root.geometry("1000x600")
         self.root.state('zoomed')
 
@@ -1174,7 +1428,7 @@ class buscarBo(TreeViewHelper):
         return f"Tela de Buscar BO chamada pelo módulo: {self.ultimo_modulo}"
 
     def carregar_bos(self):
-        conn = create_connection_mikonos()
+        conn = create_connection_Protheus()
         if conn is None:
             return
 
@@ -1221,7 +1475,7 @@ class buscarBo(TreeViewHelper):
         if not termo:
             return
 
-        conn = create_connection_mikonos()
+        conn = create_connection_Protheus()
         if conn is None:
             messagebox.showerror("Erro", "Falha ao conectar ao banco de dados")
             return
@@ -1287,13 +1541,13 @@ class exibir_detalhes():
     def __init__(self, parent, tree, caller_id=None):
         self.root = tk.Toplevel(parent)
         self.root.title("Detalhes BO")
-        self.root.iconbitmap(resource_path('images/SAREM.ico'))
+        self.root.iconbitmap(resource_path('SAREM.ico'))
         self.root.minsize(400, 300)
+        self.root.resizable(False, False)
         self.root.grab_set()
         self.root.focus_set()
 
         self.root.transient(parent)
-        center_window_child(self.root, parent)
         self.root.grab_set()
 
         self.tree = tree
@@ -1323,6 +1577,9 @@ class exibir_detalhes():
         self.sc5_detalhes(row=detalhe_row)
         self.itens_bo(row=detalhe_row + 1)
         self.opcoes_bo(row=detalhe_row + 2)
+
+        self.root.update_idletasks()
+        center_window_child(self.root, parent)
 
     def verificar_bo_acompanhada(self):
         item_selecionado = self.tree.selection()
@@ -1400,7 +1657,7 @@ class exibir_detalhes():
 
         valores2 = self.tree.item(item_selecionado2, "values")
 
-        conn = create_connection_mikonos()
+        conn = create_connection_Protheus()
         if conn is None:
             messagebox.showerror("Erro", "Falha ao conectar ao banco de dados")
             return
@@ -1463,13 +1720,13 @@ class exibir_detalhes_acompanhando():
     def __init__(self, parent, tree, caller_id=None):
         self.root = tk.Toplevel(parent)
         self.root.title("Detalhes BO")
-        self.root.iconbitmap(resource_path('images/SAREM.ico'))
+        self.root.iconbitmap(resource_path('SAREM.ico'))
         self.root.minsize(400, 300)
+        self.root.resizable(False, False)
         self.root.grab_set()
         self.root.focus_set()
 
         self.root.transient(parent)
-        center_window_child(self.root, parent)
         self.root.grab_set()
 
         self.tree = tree
@@ -1479,6 +1736,9 @@ class exibir_detalhes_acompanhando():
 
         self.sc5_detalhes()
         self.itens_bo()
+
+        self.root.update_idletasks()
+        center_window_child(self.root, parent)
 
     def sc5_detalhes(self):
         self.root.grid_rowconfigure(0, weight=3)
@@ -1560,7 +1820,7 @@ class exibir_detalhes_acompanhando():
 
         valores2 = self.tree.item(item_selecionado2, "values")
 
-        conn = create_connection_mikonos()
+        conn = create_connection_Protheus()
         if conn is None:
             messagebox.showerror("Erro", "Falha ao conectar ao banco de dados")
             return
@@ -1609,7 +1869,7 @@ class acompanhar_Bo:
         self.parent = parent
         self.root = tk.Toplevel(parent)
         self.root.title("Acompanhar BO")
-        self.root.iconbitmap(resource_path('images/SAREM.ico'))
+        self.root.iconbitmap(resource_path('SAREM.ico'))
         
         self.root.transient(parent)
         center_window_child(self.root, parent)
@@ -1959,11 +2219,6 @@ class acompanhar_Bo:
                 exibir_detalhes.instance.root.destroy()
                 return
 
-            # Atualiza a sequência APÓS salvar
-            cursor.execute(
-                "UPDATE bo_sequence SET last_number = last_number + 1")
-            conn.commit()
-
             messagebox.showinfo("Sucesso", "BO salva com sucesso!")
             exibir_detalhes.instance.root.destroy()
 
@@ -1981,10 +2236,18 @@ class acompanhar_Bo:
                 from modulos.varejo import VarejoModule
                 if VarejoModule.instance is not None:
                     if VarejoModule.instance is not None:
-                        print("Instância do módulo varejo encontrada.")
                         VarejoModule.instance.atualizar_bos()
                     else:
                         print("Instância do módulo varejo não encontrada.")
+                else:
+                    pass
+            elif self.ultimo_modulo == "Exportacao":
+                from modulos.exportacao import ExportacaoModule
+                if ExportacaoModule.instance is not None:
+                    if ExportacaoModule.instance is not None:
+                        ExportacaoModule.instance.atualizar_bos()
+                    else:
+                        print("Instância do módulo exportacao não encontrada.")
                 else:
                     pass
 
@@ -2002,3 +2265,4 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = exibir_detalhes(root)
     root.mainloop()
+    ConfigEditor()

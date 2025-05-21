@@ -18,7 +18,7 @@ class VarejoModule:
         self.user = user
         self.root = tk.Tk()
         self.root.title("SAREM - Módulo Varejo")
-        self.root.iconbitmap(resource_path('images/SAREM.ico'))
+        self.root.iconbitmap(resource_path('SAREM.ico'))
 
         self.root.state('zoomed')
 
