@@ -10,7 +10,6 @@ class Header:
     def __init__(self, parent, user, caller_id=None, tree=None):
         self.user = user
         self.parent = parent
-        from telas import Embarcados, Estatisticas, Relatorios
 
         self.ultimo_modulo = caller_id
         self.tree = tree
@@ -18,18 +17,38 @@ class Header:
         header = ttk.Frame(self.parent)
         header.pack(fill=tk.X)
 
-        ttk.Button(header, text="Embarcados", command=lambda: Embarcados(
-            parent, caller_id=self.ultimo_modulo)).pack(side=tk.LEFT)
-        ttk.Button(header, text="Estatísticas", command=lambda: Estatisticas(
-            parent, caller_id=self.ultimo_modulo)).pack(side=tk.LEFT)
-        ttk.Button(header, text="Gerar Relatório", command=lambda: Relatorios(
-            parent, caller_id=self.ultimo_modulo)).pack(side=tk.LEFT)
-        ttk.Button(header, text="Logoff",
-                   command=self.logoff).pack(side=tk.RIGHT)
-        ttk.Button(header, text="Atualizar",
-                   command=lambda: self.carregar_bos()).pack(side=tk.RIGHT)
-        ttk.Button(header, text="Buscar BO",
-                   command=self.buscar_bo).pack(side=tk.RIGHT)
+        ttk.Button(header, text="Embarcados", command=self.abrir_embarcados).pack(side=tk.LEFT)
+        ttk.Button(header, text="Estatísticas", command=self.abrir_estatisticas).pack(side=tk.LEFT)
+        ttk.Button(header, text="Gerar Relatório", command=self.abrir_relatorios).pack(side=tk.LEFT)
+        ttk.Button(header, text="Gerar Nova BO", command=self.abrir_gerar_bo).pack(side=tk.LEFT)
+        ttk.Button(header, text="Logoff", command=self.logoff).pack(side=tk.RIGHT)
+        ttk.Button(header, text="Atualizar", command=lambda: self.carregar_bos()).pack(side=tk.RIGHT)
+        ttk.Button(header, text="Buscar BO", command=self.abrir_buscar_bo).pack(side=tk.RIGHT)
+
+    def abrir_embarcados(self):
+        from telas import Embarcados
+        janela = Embarcados(self.parent, caller_id=self.ultimo_modulo)
+        self.parent.wait_window(janela.root)
+
+    def abrir_estatisticas(self):
+        from telas import Estatisticas
+        janela = Estatisticas(self.parent, caller_id=self.ultimo_modulo)
+        self.parent.wait_window(janela.root)
+
+    def abrir_relatorios(self):
+        from telas import Relatorios
+        janela = Relatorios(self.parent, caller_id=self.ultimo_modulo)
+        self.parent.wait_window(janela.root)
+
+    def abrir_gerar_bo(self):
+        from telas import gerarBO
+        janela = gerarBO(self.parent, caller_id=self.ultimo_modulo)
+        self.parent.wait_window(janela.root)
+
+    def abrir_buscar_bo(self):
+        from telas import buscarBo
+        janela = buscarBo(self.parent, caller_id=self.ultimo_modulo)
+        self.parent.wait_window(janela.root)
 
     def carregar_bos(self):
         conn = create_connection()

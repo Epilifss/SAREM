@@ -38,4 +38,5 @@ make_executable.py
 instalador.iss
 msodbcsql.msi
 main.spec
+theme.py
 /installer/

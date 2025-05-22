@@ -1,3 +1,4 @@
+# Bibliotecas
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import threading
@@ -27,13 +28,20 @@ from reportlab.lib.units import cm
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
 from textwrap import wrap
+
+# Componentes
+from components import *
+
+# Modulos
 from modulos.corporativo import CorporativoModule
 from modulos.varejo import VarejoModule
 from modulos.exportacao import ExportacaoModule
-# from modulos.exportacao import ExportacaoModule
-from components import *
+
+# Banco de dados
 from database import create_connection_Protheus
 from database import create_connection
+
+# Estilos
 
 def resource_path(relative_path):
     """Retorna o caminho absoluto para o recurso, funciona para dev e PyInstaller."""
@@ -116,10 +124,11 @@ class TreeViewHelper:
     def ajustar_colunas(self):
         for col in self.tree["columns"]:
             valores = [self.tree.set(item, col) for item in self.tree.get_children()]
-
-            max_largura = max(len(str(valor)) for valor in valores)
-
-            self.tree.column(col, width=max_largura * 10) 
+        if not valores:
+            largura = 50  # valor padrão mínimo
+        else:
+            largura = max(len(str(valor)) for valor in valores) * 10
+        self.tree.column(col, width=largura) 
 
 def get_config_path():
     appdata = os.environ.get('APPDATA') or os.path.expanduser('~')
@@ -144,14 +153,14 @@ class ConfigEditor:
         with open(CONFIG_PATH, "w") as configfile:
             self.config.write(configfile)
 
-        # Campos para o banco principal
+        # Campos para o banco SAREM
         campos_db = [
             ("server", "Servidor"),
             ("database", "Banco de Dados"),
             ("user", "Usuário"),
             ("password", "Senha")
         ]
-        # Campos para o Protheus
+        # Campos para o banco Protheus
         campos_prot = [
             ("server", "Servidor"),
             ("database", "Banco"),
@@ -250,8 +259,7 @@ class LoginWindow:
         self.password = ttk.Entry(self.frame, show="*")
         self.password.grid(row=2, column=1)
 
-        self.login_btn = ttk.Button(
-            self.frame, text="Login", command=self.login)
+        self.login_btn = ttk.Button(self.frame, text="Login", command=self.login)
         self.login_btn.grid(row=3, column=0, columnspan=2, pady=5)
 
         self.config_btn = ttk.Button(
@@ -266,6 +274,7 @@ class LoginWindow:
     def abrir_config(self):
         self.root.withdraw()
         editor = ConfigEditor(self.root)
+        self.root.wait_window(editor.root)
         try:
             self.root.deiconify()
         except tk.TclError:
@@ -431,7 +440,6 @@ class AdminPanel:
         NovoUsuarioWindow(self.root, self)
 
     def excluir_usuario(self):
-        """Exclui o usuário selecionado"""
         if not hasattr(self, 'usuario_selecionado') or not self.usuario_selecionado:
             messagebox.showerror("Erro", "Nenhum usuário selecionado")
             return
@@ -449,7 +457,6 @@ class AdminPanel:
         try:
             cursor = conn.cursor()
 
-            # Debug: Verifique se o usuário realmente existe antes da exclusão
             cursor.execute("SELECT * FROM users WHERE id=?",
                            (self.usuario_selecionado,))
             usuario_existente = cursor.fetchone()
@@ -467,15 +474,14 @@ class AdminPanel:
                            (self.usuario_selecionado,))
             conn.commit()
 
-            # Debug: Verifique se algum registro foi realmente excluído
             if cursor.rowcount == 0:
                 messagebox.showerror(
                     "Erro", "Nenhum registro foi excluído. Verifique se o usuário existe.")
             else:
                 messagebox.showinfo("Sucesso", "Usuário excluído com sucesso!")
 
-            self.carregar_usuarios()  # Atualiza a lista
-            self.usuario_selecionado = None  # Resetar seleção
+            self.carregar_usuarios()
+            self.usuario_selecionado = None
 
         except pyodbc.Error as e:
             messagebox.showerror("Erro", f"Erro ao excluir usuário: {e}")
@@ -486,7 +492,6 @@ class AdminPanel:
                 conn.close()
 
     def editar_usuario(self):
-        """Abre a janela para editar o usuário selecionado."""
         selected_items = self.tree.selection()
         if not selected_items:
             messagebox.showwarning(
@@ -533,7 +538,6 @@ class AdminPanel:
             entry.grid(row=len(campos_db)+2+i, column=1, pady=5)
             self.mik_entries[campo] = entry
 
-        # Carrega valores atuais
         if "database" in self.db_config:
             for campo in self.db_entries:
                 valor = self.db_config["database"].get(campo, "")
@@ -565,7 +569,6 @@ class AdminPanel:
             messagebox.showerror("Erro", f"Falha ao salvar: {e}")
 
     def cancelar_config_db(self):
-        # Apenas recarrega os valores do arquivo, desfazendo alterações não salvas
         for campo, entry in self.db_entries.items():
             entry.delete(0, tk.END)
             valor = self.db_config["database"].get(campo, "")
@@ -593,7 +596,6 @@ class NovoUsuarioWindow:
         campos = ["Usuário", "Senha", "Módulo", "Admin"]
         self.entries = {}
 
-        # Cria um frame centralizado para os campos
         content = ttk.Frame(self.root, padding=20)
         content.grid(row=0, column=0, sticky="nsew")
         self.root.grid_rowconfigure(0, weight=1)
@@ -616,12 +618,10 @@ class NovoUsuarioWindow:
             entry.grid(row=i, column=1, padx=10, pady=8)
             self.entries[campo] = entry
 
-        # Botão Salvar centralizado
         ttk.Button(content, text="Salvar", command=self.salvar).grid(
             row=len(campos), column=0, columnspan=2, pady=(15, 0)
         )
 
-        # Centraliza a janela na tela
         self.root.update_idletasks()
         width = self.root.winfo_width()
         height = self.root.winfo_height()
@@ -670,12 +670,11 @@ class EditarUsuarioWindow:
         self.root.grab_set()
         self.root.focus_set()
         self.admin_panel = admin_panel
-        self.user_data = user_data  # user_data deve ser uma tupla
+        self.user_data = user_data
 
         campos = ["Usuário", "Senha", "Módulo", "Admin"]
         self.entries = {}
 
-        # Cria um frame centralizado para os campos
         content = ttk.Frame(self.root, padding=20)
         content.grid(row=0, column=0, sticky="nsew")
         self.root.grid_rowconfigure(0, weight=1)
@@ -702,12 +701,10 @@ class EditarUsuarioWindow:
             entry.grid(row=i, column=1, padx=10, pady=8)
             self.entries[campo] = entry
 
-        # Botão Salvar centralizado
         ttk.Button(content, text="Salvar", command=self.salvar).grid(
             row=len(campos), column=0, columnspan=2, pady=(15, 0)
         )
 
-        # Centraliza a janela na tela
         self.root.update_idletasks()
         width = self.root.winfo_width()
         height = self.root.winfo_height()
@@ -770,7 +767,6 @@ class Embarcados(TreeViewHelper):
 
         self.root.transient(parent)
         center_window_child(self.root, parent)
-        self.root.grab_set()
 
         self.ultimo_modulo = caller_id
         print(self.identificar_chamador())
@@ -800,7 +796,6 @@ class Embarcados(TreeViewHelper):
         self.tree.bind("<Double-1>", lambda event: exibir_detalhes_acompanhando(self.root,
                        self.tree, caller_id="Corporativo"))
 
-        # center_window(self)
         self.carregar_bos()
         self.root.mainloop()
 
@@ -899,11 +894,11 @@ class Estatisticas:
         self.root = tk.Toplevel(parent)
         self.root.title("Estatísticas")
         self.root.iconbitmap(resource_path('SAREM.ico'))
-        self.root.geometry("1000x600")
+        self.root.geometry("800x500")
         self.root.state('zoomed')
 
         self.root.transient(parent)
-        self.root.grab_set()
+        center_window_child(self.root, parent)
 
         self.ultimo_modulo = caller_id
         print(self.identificar_chamador())
@@ -937,7 +932,6 @@ class Estatisticas:
         self.atualizar_grafico()
 
         self.root.mainloop()
-
         
     def identificar_chamador(self):
         if self.ultimo_modulo is None:
@@ -1028,7 +1022,6 @@ class Relatorios(TreeViewHelper):
 
         self.root.transient(parent)
         center_window_child(self.root, parent)
-        self.root.grab_set()
 
         self.root.grid_rowconfigure(0, weight=1)
         self.root.grid_columnconfigure(1, weight=1)
@@ -1361,6 +1354,60 @@ class Relatorios(TreeViewHelper):
             raise ValueError(
                 "É necessário informar o identificador do módulo que chamou a função")
         return f"Tela de Relatórios chamada pelo módulo: {self.ultimo_modulo}"
+    
+class gerarBO():
+    def __init__(self, parent, caller_id=None):
+        self.parent = parent
+        self.root = tk.Toplevel(parent)
+        self.root.title("Solicitação de nova BO")
+        self.root.iconbitmap(resource_path('SAREM.ico'))
+        self.root.minsize(400, 300)
+        self.root.resizable(False, False)
+        self.root.focus_set()
+
+        self.root.transient(parent)
+
+        self.ultimo_modulo = caller_id
+        print(self.identificar_chamador())
+
+        campos = [
+            ("cliente", "Cliente"),
+            ("loja", "Loja"),
+            ("n_de_bo", "Número de BO"),
+            ("n_de_pedido", "Número de Pedido"),
+            ("endereco", "Endereço"),
+            ("invoice_inicial", "Invoice Inicial"),
+            ("nf_de_fabrica", "NF de Fábrica"),
+            ("data_emissao", "Data de Emissão"),
+            ("nf_envio", "NF de Envio"),
+        ]
+        self.entries = {}
+
+        frame = ttk.Frame(self.root, padding=20)
+        frame.pack(expand=True, fill=tk.BOTH)
+
+        ttk.Label(frame, text="Boletim de Ocorrência", font=("Arial", 10, "bold")).grid(row=0, column=0, columnspan=2, pady=(0, 10))
+        for i, (campo, label) in enumerate(campos):
+            ttk.Label(frame, text=label + ":").grid(row=i+1, column=0, sticky=tk.W, pady=5)
+            entry = ttk.Entry(frame, width=30, show="*" if campo == "password" else "")
+            entry.grid(row=i+1, column=1, pady=5)
+            self.entries[campo] = entry
+
+        # row_btn = len(campos) + 2
+        # ttk.Button(frame, text="Salvar", command=self.salvar).grid(row=row_btn, column=0, pady=15, sticky="ew")
+        # ttk.Button(frame, text="Cancelar", command=self.cancelar).grid(row=row_btn, column=1, pady=15, sticky="ew")
+
+        self.root.update_idletasks()
+        largura = self.root.winfo_reqwidth()
+        altura = self.root.winfo_reqheight()
+        self.root.geometry(f"{largura}x{altura}")
+        center_window_child(self.root, parent)
+
+    def identificar_chamador(self):
+        if self.ultimo_modulo is None:
+            raise ValueError(
+                "É necessário informar o identificador do módulo que chamou a função")
+        return f"Tela de Gerar BO chamada pelo módulo: {self.ultimo_modulo}"
 
 class buscarBo(TreeViewHelper):
     def __init__(self, parent, caller_id=None):
@@ -1372,7 +1419,6 @@ class buscarBo(TreeViewHelper):
         self.root.state('zoomed')
 
         self.root.transient(parent)
-        self.root.grab_set()
 
         self.ultimo_modulo = caller_id
 
@@ -1566,7 +1612,7 @@ class exibir_detalhes():
                 aviso_frame,
                 text="⚠️ Esta BO já está sendo acompanhada!",
                 foreground="red",
-                font=("Arial", 12, "bold")
+                font=("Arial", 10, "bold")
             )
             aviso_label.pack(fill="x")
 
