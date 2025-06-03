@@ -105,7 +105,10 @@ def ensure_tables_exist():
                     created_at DATETIME DEFAULT GETDATE(),
                     dt_embarque DATE,
                     modulo VARCHAR(50),
-                    filial VARCHAR(15)
+                    filial VARCHAR(15),
+                    D_E_L_E_T_ CHAR(1) DEFAULT ' ',
+                    user_delet VARCHAR(50) DEFAULT NULL,
+                    deleted_at DATETIME DEFAULT NULL
                 )
             """)
 

@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import pyodbc
-from telas import *
+from funcoes import *
 from components import *
 from database import create_connection
 
@@ -24,7 +24,7 @@ class VarejoModule:
 
         VarejoModule.instance = self
 
-        from telas import exibir_detalhes_acompanhando
+        from funcoes import exibir_detalhes_acompanhando
 
         # Lista de BOs
         self.tree = ttk.Treeview(self.root, columns=(
@@ -37,7 +37,7 @@ class VarejoModule:
         self.tree.heading("motivo", text="Motivo")
 
         self.tree.bind("<Double-1>", lambda event: exibir_detalhes_acompanhando(self.root,
-                       self.tree, caller_id="Corporativo"))
+                       self.tree, caller_id="Varejo", user=self.user))
 
         # Cabeçalho
         self.header = Header(self.root, self.user, caller_id="Varejo", tree=self.tree)
@@ -69,7 +69,7 @@ class VarejoModule:
         try:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT bo_number, op, status, tipo_ocorrencia, setor_responsavel, motivo FROM bo_records WHERE modulo LIKE 'varejo' AND status NOT LIKE 'Embarcado' AND bo_number LIKE ?", (f"%{termo}%",))
+                "SELECT bo_number, op, status, tipo_ocorrencia, setor_responsavel, motivo FROM bo_records WHERE modulo LIKE 'varejo' AND status NOT LIKE 'Embarcado' AND bo_number LIKE ? AND D_E_L_E_T_ <> '*'", (f"%{termo}%",))
             rows = cursor.fetchall()
 
             self.tree.delete(*self.tree.get_children())

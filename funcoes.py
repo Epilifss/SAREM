@@ -13,6 +13,7 @@ import datetime
 import matplotlib.pyplot as plt
 import pandas as pd
 import configparser
+import requests
 from moviepy import VideoFileClip
 from PIL import Image, ImageTk
 from matplotlib.figure import Figure
@@ -43,8 +44,38 @@ from database import create_connection
 
 # Estilos
 
+
+# Funções
+
+VERSAO_ATUAL = "1.0.1"
+URL_VERSAO = "https://seurepositorio.com/versao.txt"
+URL_DOWNLOAD = "https://seurepositorio.com/seu_instalador.exe"
+
+def verificar_e_att():
+    try:
+        resposta = requests.get(URL_VERSAO, timeout=5)
+        if resposta.status_code == 200:
+            versao_remota = resposta.text.strip()
+            if versao_remota > VERSAO_ATUAL:
+                temp_dir = tempfile.gettempdir()
+                caminho_instalador = os.path.join(temp_dir, "atualizacao.exe")
+                with requests.get(URL_DOWNLOAD, stream=True) as r:
+                    if r.status_code == 200:
+                        with open(caminho_instalador, 'wb') as f:
+                            for chunk in r.iter_content(chunk_size=8192):
+                                f.write(chunk)
+                        print(f"Atualização disponível: {versao_remota}. Instalando...")
+                        subprocess.run([caminho_instalador], check=True)
+                        print("Atualização concluída. O programa será reiniciado.")
+                        os.execv(sys.executable, ['python'] + sys.argv)
+                    else:
+                        print("Erro ao baixar o instalador.")
+        return None
+    except requests.RequestException as e:
+        print(f"Erro ao verificar atualização: {e}")
+        return None
+
 def resource_path(relative_path):
-    """Retorna o caminho absoluto para o recurso, funciona para dev e PyInstaller."""
     if hasattr(sys, '_MEIPASS'):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.abspath("."), relative_path)
@@ -1107,7 +1138,7 @@ class Relatorios(TreeViewHelper):
                 self.tree.delete(item)
 
             # Base da consulta SQL
-            query = "SELECT * FROM bo_records WHERE modulo LIKE ?"
+            query = "SELECT * FROM bo_records WHERE modulo LIKE ? AND D_E_L_E_T_ <> '*'"
             params = [self.ultimo_modulo]
 
             # Adiciona condições dinamicamente com base nos filtros
@@ -1410,7 +1441,8 @@ class gerarBO():
         return f"Tela de Gerar BO chamada pelo módulo: {self.ultimo_modulo}"
 
 class buscarBo(TreeViewHelper):
-    def __init__(self, parent, caller_id=None):
+    def __init__(self, parent, caller_id=None, user=None):
+        self.user = user
         self.parent = parent
         self.root = tk.Toplevel(parent)
         self.root.title("Buscar BO")
@@ -1460,7 +1492,7 @@ class buscarBo(TreeViewHelper):
         self.tree.pack(expand=True, fill=tk.BOTH, side=tk.LEFT)
 
         self.tree.bind("<Double-1>", lambda event: exibir_detalhes(self.root,
-                       self.tree, caller_id=self.ultimo_modulo))
+                       self.tree, caller_id=self.ultimo_modulo, user=self.user))
 
         center_window(self)
         self.carregar_bos()
@@ -1584,7 +1616,8 @@ class buscarBo(TreeViewHelper):
 class exibir_detalhes():
     instance = None
 
-    def __init__(self, parent, tree, caller_id=None):
+    def __init__(self, parent, tree, caller_id=None, user=None):
+        self.user = user
         self.root = tk.Toplevel(parent)
         self.root.title("Detalhes BO")
         self.root.iconbitmap(resource_path('SAREM.ico'))
@@ -1640,7 +1673,7 @@ class exibir_detalhes():
             return False
         try:
             cursor = conn.cursor()
-            cursor.execute("SELECT 1 FROM bo_records WHERE bo_number = ?", (bo_number,))
+            cursor.execute("SELECT 1 FROM bo_records WHERE bo_number = ? AND D_E_L_E_T_ <> '*'", (bo_number,))
             exists = cursor.fetchone()
             return exists is not None
         except Exception:
@@ -1756,14 +1789,16 @@ class exibir_detalhes():
 
     def acompanhar_bo(self):
         obj = acompanhar_Bo(self.root, self.tree,
-                            caller_id=self.ultimo_modulo)
+                            caller_id=self.ultimo_modulo, user=self.user)
         resultado = obj.identificar_chamador()
         print(resultado)
 
 class exibir_detalhes_acompanhando():
     instance = None
 
-    def __init__(self, parent, tree, caller_id=None):
+    def __init__(self, parent, tree, caller_id=None, user=None):
+        self.parent = parent
+        self.user = user
         self.root = tk.Toplevel(parent)
         self.root.title("Detalhes BO")
         self.root.iconbitmap(resource_path('SAREM.ico'))
@@ -1778,10 +1813,11 @@ class exibir_detalhes_acompanhando():
         self.tree = tree
         self.ultimo_modulo = caller_id
 
-        exibir_detalhes.instance = self
+        exibir_detalhes_acompanhando.instance = self
 
         self.sc5_detalhes()
         self.itens_bo()
+        self.opcoes_bo()
 
         self.root.update_idletasks()
         center_window_child(self.root, parent)
@@ -1815,7 +1851,7 @@ class exibir_detalhes_acompanhando():
 
         cursor = conn.cursor()
 
-        query = """SELECT bo_number, op, loja, tipo_ocorrencia, motivo, CONVERT(VARCHAR,CONVERT(DATETIME,previsao_embarque),103), descricao, [status]
+        query = """SELECT bo_number, op, loja, tipo_ocorrencia, motivo, CONVERT(VARCHAR,CONVERT(DATETIME,previsao_embarque),103), descricao, frete, [status]
         FROM bo_records
         WHERE bo_number LIKE ?"""
 
@@ -1832,7 +1868,7 @@ class exibir_detalhes_acompanhando():
 
         # Criando as labels
         labels = ["BO:", "OP:", "CLIENTE:", "TIPO DE OCORRÊNCIA:",
-                  "MOTIVO:", "PREVISÃO DE EMBARQUE:", "DESCRIÇÃO:", "STATUS:"]
+                  "MOTIVO:", "PREVISÃO DE EMBARQUE:", "DESCRIÇÃO:", "FRETE", "STATUS:"]
         if itens_bo:
             for i, label_text in enumerate(labels):
                 ttk.Label(frame_sc5Detalhes, text=label_text).grid(
@@ -1903,15 +1939,288 @@ class exibir_detalhes_acompanhando():
         self.root.update_idletasks()
         self.root.geometry("")
 
-    def acompanhar_bo(self):
-        obj = acompanhar_Bo(self.root, self.tree,
-                            caller_id=self.ultimo_modulo)
-        resultado = obj.identificar_chamador()
-        print(resultado)
+    def opcoes_bo(self, row=2):
+        self.root.grid_rowconfigure(row, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
 
+        frame_opcoesBo = ttk.LabelFrame(
+            self.root, text="Opções", padding=10)
+        frame_opcoesBo.grid(row=row, column=0, sticky="nsew", padx=10, pady=10)
 
+        frame_opcoesBo.grid_rowconfigure(0, weight=1)
+        frame_opcoesBo.grid_columnconfigure(2, weight=1)
+
+        ttk.Button(frame_opcoesBo, text="Editar BO", command=self.editar_bo).grid(
+            row=0, column=0, sticky="e", padx=5, pady=2)
+        ttk.Button(frame_opcoesBo, text="Excluir BO", command=self.excluir_bo).grid(
+            row=0, column=1, sticky="e", padx=5, pady=2)
+
+    def editar_bo(self):
+        self.root.withdraw()
+        editor = editar_Bo(self.parent, self.tree, caller_id=self.ultimo_modulo, user=self.user)
+        self.root.wait_window(editor.root)
+        try:
+            self.root.deiconify()
+        except tk.TclError:
+            pass
+        
+
+    def excluir_bo(self):
+        print(f"Usuário {self.user[1]} solicitou a exclusão da BO.")
+
+        resposta = messagebox.askyesno("Confirmação",
+            "Você tem certeza que deseja excluir esta BO? Esta ação não pode ser desfeita.",
+            icon=messagebox.WARNING
+        )
+
+        item_selecionado = self.tree.selection()
+        if not item_selecionado:
+            messagebox.showwarning("Aviso", "Nenhum item selecionado.")
+            return
+        
+        valores = self.tree.item(item_selecionado, "values")
+        bo_number = valores[0]
+
+        
+        if resposta is True:
+            try:
+                conn = create_connection()
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE bo_records
+                    SET D_E_L_E_T_ = '*', user_delet = ?, deleted_at = GETDATE()
+                    WHERE bo_number = ?
+                """, (self.user[1]), str(bo_number,))
+                conn.commit()
+                messagebox.showinfo("Sucesso", f"{bo_number} excluída com sucesso!")
+                self.root.destroy()
+            except pyodbc.Error as e:
+                messagebox.showerror("Erro", f"Erro ao excluir BO: {e}")
+                self.root.destroy()
+            finally:
+                if conn:
+                    cursor.close()
+                    conn.close()
+
+            if self.ultimo_modulo == "Corporativo":
+                from modulos.corporativo import CorporativoModule
+                if CorporativoModule.instance is not None:
+                    if CorporativoModule.instance is not None:
+                        CorporativoModule.instance.atualizar_bos()
+                    else:
+                        print("Instância do módulo corporativo não encontrada.")
+                else:
+                    pass
+            elif self.ultimo_modulo == "Varejo":
+                from modulos.varejo import VarejoModule
+                if VarejoModule.instance is not None:
+                    if VarejoModule.instance is not None:
+                        VarejoModule.instance.atualizar_bos()
+                    else:
+                        print("Instância do módulo varejo não encontrada.")
+                else:
+                    pass
+            elif self.ultimo_modulo == "Exportacao":
+                from modulos.exportacao import ExportacaoModule
+                if ExportacaoModule.instance is not None:
+                    if ExportacaoModule.instance is not None:
+                        ExportacaoModule.instance.atualizar_bos()
+                    else:
+                        print("Instância do módulo exportacao não encontrada.")
+                else:
+                    pass
+        else:
+            pass
+
+class editar_Bo():
+    def __init__(self, parent, tree, caller_id=None, user=None):
+        self.user = user
+        self.root = tk.Toplevel(parent)
+        self.root.title("Editar BO")
+        self.root.iconbitmap(resource_path('SAREM.ico'))
+        self.root.minsize(400, 300)
+        self.root.resizable(False, False)
+        self.root.transient(parent)
+        self.root.grab_set()
+        self.root.focus_set()
+
+        self.ultimo_modulo = caller_id
+
+        item_selecionado = tree.selection()
+        if not item_selecionado:
+            messagebox.showwarning("Aviso", "Nenhum item selecionado.")
+            return
+        
+        valores = tree.item(item_selecionado, "values")
+        self.bo_number = valores[0]
+
+        print(f"Usuário {self.user[1]} solicitou a edição da {self.bo_number} no módulo {self.ultimo_modulo}.")
+
+        tk.Label(self.root, text=f"Editando BO: {self.bo_number}").pack(pady=10)
+        self.entries = {}
+
+        campos = [
+            ("tipo_ocorrencia", "Tipo de Ocorrência"),
+            ("motivo", "Motivo"),
+            ("descricao", "Descrição"),
+            ("setor_responsavel", "Setor Responsável"),
+            ("frete", "Frete"),
+            ]
+        
+        frame_editaveis = ttk.Frame(self.root, padding=20)
+        frame_editaveis.pack(expand=True, fill=tk.BOTH)
+
+        try:
+            conn = create_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM bo_records WHERE bo_number = ?", (self.bo_number,))
+            self.valores = cursor.fetchone()
+            if self.valores is None:
+                messagebox.showerror("Erro", f"BO {self.bo_number} não encontrada.")
+                self.root.destroy()
+                return
+            cursor.close()
+            conn.close()
+        except pyodbc.Error as e:
+            messagebox.showerror("Erro", f"Erro ao carregar BOs: {e}")
+            self.root.destroy()
+            return
+
+        # print(f"Valores obtidos do banco: {self.valores}")
+
+        for i, (campo, label_text) in enumerate(campos):
+            ttk.Label(frame_editaveis, text=label_text + ":").grid(
+                row=i, column=0, sticky=tk.W, pady=5)
+            if campo == "frete":
+                entry = ttk.Combobox(frame_editaveis, values=["CIF", "FOB"], state="readonly")
+            elif campo == "motivo":
+                entry = ttk.Combobox(frame_editaveis, values=self.obter_motivos())
+            elif campo == "setor_responsavel":
+                entry = ttk.Combobox(frame_editaveis, values=self.obter_setores())
+            elif campo == "descricao":
+                entry = tk.Text(frame_editaveis, width=30, height=5, font=("Arial", 8))
+            else:
+                entry = ttk.Entry(frame_editaveis, width=30)
+            valor_idx = {
+                "tipo_ocorrencia": 5,
+                "motivo": 6,
+                "descricao": 11,
+                "setor_responsavel": 8,
+                "frete": 7
+            }
+            idx = valor_idx.get(campo)
+            if idx is not None and self.valores and len(self.valores) > idx:
+                if campo == "frete":
+                    entry.set(self.valores[idx])
+                elif campo == "descricao":
+                    entry.insert("1.0", self.valores[idx])
+                elif campo == "motivo":
+                    entry.insert(0, self.valores[idx])
+                elif campo == "setor_responsavel":
+                    entry.insert(0, self.valores[idx])
+                else:
+                    entry.insert(0, self.valores[idx])
+            entry.grid(row=i, column=1, pady=5, sticky="ew")
+            self.entries[campo] = entry
+
+        ttk.Button(frame_editaveis, text="Salvar", command=self.salvar).grid(
+            row=len(campos), column=0, pady=15, sticky="ew")
+        ttk.Button(frame_editaveis, text="Cancelar", command=self.cancel).grid(
+            row=len(campos), column=1, pady=15, sticky="ew")
+
+        self.root.update_idletasks()
+
+        center_window_child(self.root, parent)
+
+    def obter_setores(self):
+        conn = create_connection()
+        cursor = conn.cursor()
+    
+        cursor.execute("SELECT DISTINCT setor_responsavel FROM bo_records WHERE setor_responsavel IS NOT NULL AND setor_responsavel NOT LIKE ''")
+        setores = [row[0] for row in cursor.fetchall()]
+
+        cursor.close()
+        conn.close()
+
+        return setores
+        
+    def obter_motivos(self):
+        conn = create_connection()
+        cursor = conn.cursor()
+    
+        cursor.execute("SELECT DISTINCT motivo FROM bo_records WHERE motivo IS NOT NULL AND motivo NOT LIKE ''")
+        motivos = [row[0] for row in cursor.fetchall()]
+
+        cursor.close()
+        conn.close()
+
+        return motivos
+
+    def salvar(self):
+        try:
+            conn = create_connection()
+            cursor = conn.cursor()
+
+            update_query = """
+                UPDATE bo_records
+                SET tipo_ocorrencia = ?, motivo = ?, descricao = ?, setor_responsavel = ?, frete = ?
+                WHERE bo_number = ?
+            """
+            cursor.execute(update_query, (
+                self.entries["tipo_ocorrencia"].get(),
+                self.entries["motivo"].get(),
+                self.entries["descricao"].get("1.0", tk.END),
+                self.entries["setor_responsavel"].get(),
+                self.entries["frete"].get(),
+                self.bo_number
+            ))
+
+            conn.commit()
+            messagebox.showinfo("Sucesso", f"BO {self.bo_number} atualizada com sucesso!")
+            self.root.destroy()
+            exibir_detalhes_acompanhando.instance.root.destroy()
+
+            if self.ultimo_modulo == "Corporativo":
+                from modulos.corporativo import CorporativoModule
+                if CorporativoModule.instance is not None:
+                    if CorporativoModule.instance is not None:
+                        CorporativoModule.instance.atualizar_bos()
+                    else:
+                        print("Instância do módulo corporativo não encontrada.")
+                else:
+                    pass
+            elif self.ultimo_modulo == "Varejo":
+                from modulos.varejo import VarejoModule
+                if VarejoModule.instance is not None:
+                    if VarejoModule.instance is not None:
+                        VarejoModule.instance.atualizar_bos()
+                    else:
+                        print("Instância do módulo varejo não encontrada.")
+                else:
+                    pass
+            elif self.ultimo_modulo == "Exportacao":
+                from modulos.exportacao import ExportacaoModule
+                if ExportacaoModule.instance is not None:
+                    if ExportacaoModule.instance is not None:
+                        ExportacaoModule.instance.atualizar_bos()
+                    else:
+                        print("Instância do módulo exportacao não encontrada.")
+                else:
+                    pass
+
+        except pyodbc.Error as e:
+            messagebox.showerror("Erro", f"Erro ao atualizar BO: {e}")
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
+    def cancel(self):
+        self.root.destroy()
+        
 class acompanhar_Bo:
-    def __init__(self, parent, tree, caller_id=None):
+    def __init__(self, parent, tree, caller_id=None, user=None):
+        self.user = user
         self.parent = parent
         self.root = tk.Toplevel(parent)
         self.root.title("Acompanhar BO")
@@ -2010,8 +2319,8 @@ class acompanhar_Bo:
         campos_ocorrencia = [
             ("Tipo de Ocorrência", ttk.Entry),
             ("Motivo", ttk.Combobox, self.obter_motivos()),
-            ("Descrição", ttk.Entry),
-            ("Setor Responsável", ttk.Combobox, self.obter_setores())
+            ("Setor Responsável", ttk.Combobox, self.obter_setores()),
+            ("Descrição", tk.Text, 1, 5),
         ]
 
         self.entries_ocorrencia = {}
@@ -2242,12 +2551,13 @@ class acompanhar_Bo:
                 self.entries_transporte["Frete"].get(),  # Frete
                 self.bo_dados[5],  # Previsão de Embarque
                 self.ultimo_modulo,  # Módulo que chamou a função
-                'Em Andamento'  # Status
+                'Em Andamento',  # Status
+                self.user[1]  # Usuário que incluiu
             ]
 
             # Primeiro, verifica se o BO já existe
             cursor.execute(
-                "SELECT 1 FROM bo_records WHERE bo_number = ?", (self.bo_dados[0],))
+                "SELECT 1 FROM bo_records WHERE bo_number = ? AND D_E_L_E_T_ <> '*'", (self.bo_dados[0],))
             exists = cursor.fetchone()
 
             if not exists:
@@ -2255,8 +2565,8 @@ class acompanhar_Bo:
                 cursor.execute('''
                     INSERT INTO bo_records (
                         bo_number, op, loja, filial, emissao_totvs, tipo_ocorrencia, motivo, descricao, setor_responsavel,
-                        frete, previsao_embarque, modulo, status
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        frete, previsao_embarque, modulo, status, user_include
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', valores)
                 conn.commit()
             else:

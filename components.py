@@ -26,28 +26,28 @@ class Header:
         ttk.Button(header, text="Buscar BO", command=self.abrir_buscar_bo).pack(side=tk.RIGHT)
 
     def abrir_embarcados(self):
-        from telas import Embarcados
+        from funcoes import Embarcados
         janela = Embarcados(self.parent, caller_id=self.ultimo_modulo)
         self.parent.wait_window(janela.root)
 
     def abrir_estatisticas(self):
-        from telas import Estatisticas
+        from funcoes import Estatisticas
         janela = Estatisticas(self.parent, caller_id=self.ultimo_modulo)
         self.parent.wait_window(janela.root)
 
     def abrir_relatorios(self):
-        from telas import Relatorios
+        from funcoes import Relatorios
         janela = Relatorios(self.parent, caller_id=self.ultimo_modulo)
         self.parent.wait_window(janela.root)
 
     def abrir_gerar_bo(self):
-        from telas import gerarBO
+        from funcoes import gerarBO
         janela = gerarBO(self.parent, caller_id=self.ultimo_modulo)
         self.parent.wait_window(janela.root)
 
     def abrir_buscar_bo(self):
-        from telas import buscarBo
-        janela = buscarBo(self.parent, caller_id=self.ultimo_modulo)
+        from funcoes import buscarBo
+        janela = buscarBo(self.parent, caller_id=self.ultimo_modulo, user=self.user)
         self.parent.wait_window(janela.root)
 
     def carregar_bos(self):
@@ -57,7 +57,7 @@ class Header:
 
         try:
             cursor = conn.cursor()
-            query = ("SELECT bo_number, op, status, tipo_ocorrencia, setor_responsavel, motivo FROM bo_records WHERE status NOT LIKE 'Embarcado' AND modulo LIKE ?")
+            query = ("SELECT bo_number, op, status, tipo_ocorrencia, setor_responsavel, motivo FROM bo_records WHERE status NOT LIKE 'Embarcado' AND modulo LIKE ? AND D_E_L_E_T_ <> '*'")
             cursor.execute(query, self.ultimo_modulo)
             rows = cursor.fetchall()
 
@@ -86,12 +86,12 @@ class Header:
 
     def logoff(self):
         self.parent.destroy()
-        from telas import LoginWindow
+        from funcoes import LoginWindow
         LoginWindow()
         
 
     def buscar_bo(self):
-        from telas import buscarBo
+        from funcoes import buscarBo
 
         obj = buscarBo(parent=self.parent, caller_id=self.ultimo_modulo)
         resultado = obj.identificar_chamador()
