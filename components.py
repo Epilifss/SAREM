@@ -85,9 +85,11 @@ class Header:
                 conn.close()
 
     def logoff(self):
+        root_principal = self.parent.master
         self.parent.destroy()
         from funcoes import LoginWindow
-        LoginWindow()
+        login = LoginWindow(root_principal)
+        login.root.after(100, login.root.focus_force)
         
 
     def buscar_bo(self):

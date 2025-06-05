@@ -47,38 +47,96 @@ from database import create_connection
 
 # Funções
 
-VERSAO_ATUAL = "1.0.1"
-URL_VERSAO = "https://seurepositorio.com/versao.txt"
-URL_DOWNLOAD = "https://seurepositorio.com/seu_instalador.exe"
-
-def verificar_e_att():
-    try:
-        resposta = requests.get(URL_VERSAO, timeout=5)
-        if resposta.status_code == 200:
-            versao_remota = resposta.text.strip()
-            if versao_remota > VERSAO_ATUAL:
-                temp_dir = tempfile.gettempdir()
-                caminho_instalador = os.path.join(temp_dir, "atualizacao.exe")
-                with requests.get(URL_DOWNLOAD, stream=True) as r:
-                    if r.status_code == 200:
-                        with open(caminho_instalador, 'wb') as f:
-                            for chunk in r.iter_content(chunk_size=8192):
-                                f.write(chunk)
-                        print(f"Atualização disponível: {versao_remota}. Instalando...")
-                        subprocess.run([caminho_instalador], check=True)
-                        print("Atualização concluída. O programa será reiniciado.")
-                        os.execv(sys.executable, ['python'] + sys.argv)
-                    else:
-                        print("Erro ao baixar o instalador.")
-        return None
-    except requests.RequestException as e:
-        print(f"Erro ao verificar atualização: {e}")
-        return None
+def center_window_screen(win, width=350, height=100):
+    win.update_idletasks()
+    screen_width = win.winfo_screenwidth()
+    screen_height = win.winfo_screenheight()
+    x = (screen_width // 2) - (width // 2)
+    y = (screen_height // 2) - (height // 2)
+    win.geometry(f"{width}x{height}+{x}+{y}")
 
 def resource_path(relative_path):
     if hasattr(sys, '_MEIPASS'):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.abspath("."), relative_path)
+
+VERSAO_ATUAL = "1.0.1"
+URL_VERSAO = "https://dl.dropboxusercontent.com/scl/fi/dh936k1ph0m2eq5low9gn/versao.txt?rlkey=fnyxw89yee7ai571ue3znbaiv&st=xd9f26ij&dl=0"
+URL_DOWNLOAD = "https://dl.dropboxusercontent.com/scl/fi/lm41ku5uvts7nsa6we01w/Instalador_SAREM.exe?rlkey=2jwgcq2pst9i8xoo5r8l1cxtg&st=yzzgbd9k&dl=0"
+
+def verificar_e_att(parent):
+    try:
+        resposta = requests.get(URL_VERSAO, timeout=5)
+        if resposta.status_code == 200:
+            versao_remota = resposta.text.strip()
+            if versao_remota > VERSAO_ATUAL:
+                resp = messagebox.askyesno(
+                    "SAREM - Atualização disponível",
+                    f"Uma nova versão está disponível.\nDeseja atualizar agora?"
+                )
+                if not resp:
+                    return True
+
+                # Janela de progresso
+                progress_win = tk.Toplevel(parent)
+                progress_win.title("Baixando atualização")
+                progress_win.iconbitmap(resource_path('SAREM.ico'))
+                progress_win.geometry("350x100")
+                progress_win.transient(parent)
+                progress_win.grab_set()
+                ttk.Label(progress_win, text="Baixando nova versão...").pack(pady=10)
+                progress = ttk.Progressbar(progress_win, orient="horizontal", length=300, mode="determinate")
+                progress.pack(pady=10)
+                progress["value"] = 0
+
+                center_window_screen(progress_win, 350, 100)
+
+                temp_dir = tempfile.gettempdir()
+                caminho_instalador = os.path.join(temp_dir, "atualizacao.exe")
+                r = requests.get(URL_DOWNLOAD, stream=True)
+                total = int(r.headers.get('content-length', 0))
+                chunk_size = 8192
+                baixado = 0
+                f = open(caminho_instalador, 'wb')
+                chunks = r.iter_content(chunk_size=chunk_size)
+
+                def baixar_pedaco():
+                    nonlocal baixado
+                    try:
+                        chunk = next(chunks)
+                        if chunk:
+                            f.write(chunk)
+                            baixado += len(chunk)
+                            if total:
+                                valor = (baixado / total) * 100
+                                progress["value"] = valor
+                            progress_win.update_idletasks()
+                        progress_win.after(1, baixar_pedaco)
+                    except StopIteration:
+                        f.close()
+                        progress_win.destroy()
+                        if os.path.exists(caminho_instalador):
+                            messagebox.showinfo("Atualização", "Download concluído! O instalador será aberto.")
+                            print(f"Tentando abrir o instalador: {caminho_instalador}")
+                            try:
+                                subprocess.Popen(['explorer', caminho_instalador])
+                            except Exception as e:
+                                messagebox.showerror("Erro", f"Não foi possível abrir o instalador:\n{e}")
+                            parent.quit()
+                        else:
+                            messagebox.showerror("Erro", "O instalador não foi baixado corretamente.")
+
+                baixar_pedaco()
+                progress_win.transient()
+                progress_win.grab_set()
+                progress_win.wait_window()
+                return False
+
+        return True
+    except requests.RequestException as e:
+        print(f"Erro ao verificar atualização: {e}")
+        return True
+
 
 def monitorar_bo_embarcadas():
     def tarefa():
@@ -233,7 +291,6 @@ class ConfigEditor:
         ttk.Button(frame, text="Cancelar", command=self.cancelar).grid(row=row_btn, column=1, pady=15, sticky="ew")
 
         center_window(self)
-        self.root.mainloop()
 
     def cancelar(self):
         self.root.destroy()
@@ -266,12 +323,15 @@ class ConfigEditor:
             messagebox.showerror("Erro", f"Falha ao salvar: {e}")
 
 class LoginWindow:
-    def __init__(self):
-        self.root = tk.Tk()
+    def __init__(self, parent):
+        self.parent = parent
+        self.root = tk.Toplevel(parent)
         self.root.title("SAREM")
         self.root.iconbitmap(resource_path('SAREM.ico'))
         self.root.geometry("300x200")
         self.root.focus_set()
+
+        self.root.protocol("WM_DELETE_WINDOW", parent.destroy)
 
         self.frame = ttk.Frame(self.root, padding=10)
         self.frame.pack(expand=True)
@@ -300,7 +360,6 @@ class LoginWindow:
         center_window(self)
         self.username.focus_set()
         self.root.bind('<Return>', self.login)
-        self.root.mainloop()
 
     def abrir_config(self):
         self.root.withdraw()
@@ -353,24 +412,24 @@ class LoginWindow:
                 if user[4]:  # is_admin
                     self.root.destroy()
                     print(printUser + "painel de administração " + hora)
-                    AdminPanel()
+                    AdminPanel(self.parent)
                 else:
                     module = user[3]
                     if (module) == '0':
                         self.root.destroy()
                         print(printUser + "módulo Corporativo " + hora)
                         monitorar_bo_embarcadas()
-                        CorporativoModule(user)
+                        CorporativoModule(user, self.parent)
                     elif (module) == '1':
                         self.root.destroy()
                         print(printUser + "módulo Varejo " + hora)
                         monitorar_bo_embarcadas()
-                        VarejoModule(user)
+                        VarejoModule(user, self.parent)
                     elif (module) == '2':
                         self.root.destroy()
                         print(printUser + "módulo Exportação " + hora)
                         monitorar_bo_embarcadas()
-                        ExportacaoModule(user)
+                        ExportacaoModule(user, self.parent)
                     else:
                         messagebox.showerror(
                             "Erro", "Módulo do usuário não encontrado. Contate o administrador.")
@@ -386,10 +445,12 @@ class LoginWindow:
 
 
 class AdminPanel:
-    def __init__(self):
-        self.root = tk.Tk()
+    def __init__(self, parent):
+        self.root = tk.Toplevel(parent)
         self.root.title("Painel de Administração")
         self.root.iconbitmap(resource_path('SAREM.ico'))
+
+        self.root.protocol("WM_DELETE_WINDOW", parent.destroy)
 
         self.root.state('zoomed')
 
@@ -431,7 +492,6 @@ class AdminPanel:
 
         self.notebook.pack(expand=True, fill=tk.BOTH)
         self.carregar_usuarios()
-        self.root.mainloop()
 
     def carregar_usuarios(self):
         conn = create_connection()
@@ -828,7 +888,6 @@ class Embarcados(TreeViewHelper):
                        self.tree, caller_id="Corporativo"))
 
         self.carregar_bos()
-        self.root.mainloop()
 
     def identificar_chamador(self):
         if self.ultimo_modulo is None:
@@ -962,7 +1021,6 @@ class Estatisticas:
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         self.atualizar_grafico()
 
-        self.root.mainloop()
         
     def identificar_chamador(self):
         if self.ultimo_modulo is None:
@@ -1122,7 +1180,6 @@ class Relatorios(TreeViewHelper):
 
         ttk.Button(frame_relat, text="Salvar Excel", command=self.exportar_para_excel).grid(row=6, column=0, columnspan=2, pady=10)
 
-        self.root.mainloop()
         
     def gerar_relatorios(self):
         conn = create_connection()
@@ -2616,9 +2673,3 @@ class acompanhar_Bo:
             if conn:
                 cursor.close()
                 conn.close()
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = exibir_detalhes(root)
-    root.mainloop()
-    ConfigEditor()

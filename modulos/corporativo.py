@@ -14,13 +14,15 @@ def resource_path(relative_path):
 class CorporativoModule:
     instance = None # Var de class que armazena a instância atual
 
-    def __init__(self, user):
+    def __init__(self, user, parent):
         self.user = user
-        self.root = tk.Tk()
+        self.root = tk.Toplevel(parent)
         self.root.title("SAREM - Módulo Corporativo")
         self.root.state('zoomed')
 
         self.root.iconbitmap(resource_path('SAREM.ico'))  # Define o ícone da janela
+
+        self.root.protocol("WM_DELETE_WINDOW", parent.destroy)
 
         CorporativoModule.instance = self
 
