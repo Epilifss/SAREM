@@ -10,5 +10,7 @@ root.geometry('0x0+0+0')
 
 deve_continuar = verificar_e_att(root)
 if deve_continuar:
-    LoginWindow(root)
+    login_window = LoginWindow(root)
+    root.after(100, login_window.root.focus_force)
+    root.after(100, login_window.username.focus_force)
     root.mainloop()

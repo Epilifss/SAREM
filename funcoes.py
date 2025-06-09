@@ -669,9 +669,12 @@ class AdminPanel:
             valor = self.db_config["Protheus"].get(campo, "")
             entry.insert(0, valor)
 
-    def logoff(self):
+    def logoff(self, parent=None):
+        if parent is None:
+            parent = self.root
         self.root.destroy()
-        LoginWindow()
+        login_win = LoginWindow(parent.master if hasattr(parent, 'master') else parent)
+        login_win.root.after(100, lambda: (login_win.root.focus_force(), login_win.username.focus_set()))
 
 
 class NovoUsuarioWindow:
@@ -2089,9 +2092,10 @@ class exibir_detalhes_acompanhando():
         else:
             pass
 
-class editar_Bo():
+class editar_Bo:
     def __init__(self, parent, tree, caller_id=None, user=None):
         self.user = user
+        self.tree = tree
         self.root = tk.Toplevel(parent)
         self.root.title("Editar BO")
         self.root.iconbitmap(resource_path('SAREM.ico'))
@@ -2106,26 +2110,94 @@ class editar_Bo():
         item_selecionado = tree.selection()
         if not item_selecionado:
             messagebox.showwarning("Aviso", "Nenhum item selecionado.")
+            self.root.destroy()
             return
-        
+
         valores = tree.item(item_selecionado, "values")
         self.bo_number = valores[0]
 
         print(f"Usuário {self.user[1]} solicitou a edição da {self.bo_number} no módulo {self.ultimo_modulo}.")
 
-        tk.Label(self.root, text=f"Editando BO: {self.bo_number}").pack(pady=10)
-        self.entries = {}
+        self.sc5_detalhes(valores)
+        self.editaveis(parent)
+        self.opcoes_editor()
 
+        self.root.update_idletasks()
+        center_window_child(self.root, parent)
+
+    def sc5_detalhes(self, valores):
+        self.root.grid_rowconfigure(0, weight=3)
+        self.root.grid_rowconfigure(0, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
+
+        frame_sc5Detalhes = ttk.LabelFrame(
+            self.root, text="Detalhes da Ocorrência", padding=10)
+        frame_sc5Detalhes.grid(
+            row=0, column=0, sticky="nsew", padx=10, pady=10)
+
+        frame_sc5Detalhes.grid_rowconfigure(0, weight=1)
+        frame_sc5Detalhes.grid_columnconfigure(0, weight=1)
+        frame_sc5Detalhes.grid_columnconfigure(1, weight=2)
+
+        # Obtém o item selecionado no Treeview
+        item_selecionado = self.tree.selection()
+        if not item_selecionado:
+            return
+
+        # Obtém os valores do item selecionado
+        valores = self.tree.item(item_selecionado, "values")
+
+        conn = create_connection()
+        if conn is None:
+            messagebox.showerror("Erro", "Falha ao conectar ao banco de dados")
+            return
+
+        cursor = conn.cursor()
+
+        query = """SELECT bo_number, op, loja, CONVERT(VARCHAR,CONVERT(DATETIME,previsao_embarque),103), [status]
+        FROM bo_records
+        WHERE bo_number LIKE ?"""
+
+        try:
+            cursor.execute(
+                query, (f"%{valores[0]}%",))
+            itens_bo = cursor.fetchall()
+        except pyodbc.Error as e:
+            messagebox.showerror("Erro", f"Erro ao executar a consulta: {e}")
+            return
+        finally:
+            cursor.close()
+            conn.close()
+
+        # Criando as labels
+        labels = ["BO:", "OP:", "CLIENTE:", "PREVISÃO DE EMBARQUE:", "STATUS:"]
+        if itens_bo:
+            for i, label_text in enumerate(labels):
+                ttk.Label(frame_sc5Detalhes, text=label_text).grid(
+                    row=i, column=0, sticky="w", padx=5, pady=2)
+                ttk.Label(frame_sc5Detalhes, text=itens_bo[0][i]).grid(
+                    row=i, column=1, sticky="ew", padx=5, pady=2)
+        else:
+            messagebox.showinfo("Aviso", "Nenhum detalhe encontrado para este BO.")
+
+        self.root.update_idletasks()
+        self.root.minsize(400, self.root.winfo_height())
+
+    def editaveis(self, parent):
+        self.root.grid_rowconfigure(0, weight=1)
+
+        # Frame para campos editáveis
+        self.entries = {}
         campos = [
             ("tipo_ocorrencia", "Tipo de Ocorrência"),
             ("motivo", "Motivo"),
             ("descricao", "Descrição"),
             ("setor_responsavel", "Setor Responsável"),
             ("frete", "Frete"),
-            ]
-        
-        frame_editaveis = ttk.Frame(self.root, padding=20)
-        frame_editaveis.pack(expand=True, fill=tk.BOTH)
+        ]
+
+        frame_editaveis = ttk.LabelFrame(self.root, text="Campos Editáveis", padding=20)
+        frame_editaveis.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
 
         try:
             conn = create_connection()
@@ -2143,7 +2215,14 @@ class editar_Bo():
             self.root.destroy()
             return
 
-        # print(f"Valores obtidos do banco: {self.valores}")
+        # Índices dos campos na tupla retornada pelo banco
+        valor_idx = {
+            "tipo_ocorrencia": 5,
+            "motivo": 6,
+            "descricao": 11,
+            "setor_responsavel": 8,
+            "frete": 7
+        }
 
         for i, (campo, label_text) in enumerate(campos):
             ttk.Label(frame_editaveis, text=label_text + ":").grid(
@@ -2151,73 +2230,66 @@ class editar_Bo():
             if campo == "frete":
                 entry = ttk.Combobox(frame_editaveis, values=["CIF", "FOB"], state="readonly")
             elif campo == "motivo":
-                entry = ttk.Combobox(frame_editaveis, values=self.obter_motivos())
+                entry = ttk.Combobox(frame_editaveis, values=self.obter_motivos(), state="readonly")
             elif campo == "setor_responsavel":
-                entry = ttk.Combobox(frame_editaveis, values=self.obter_setores())
+                entry = ttk.Combobox(frame_editaveis, values=self.obter_setores(), state="readonly")
             elif campo == "descricao":
                 entry = tk.Text(frame_editaveis, width=30, height=5, font=("Arial", 8))
             else:
                 entry = ttk.Entry(frame_editaveis, width=30)
-            valor_idx = {
-                "tipo_ocorrencia": 5,
-                "motivo": 6,
-                "descricao": 11,
-                "setor_responsavel": 8,
-                "frete": 7
-            }
             idx = valor_idx.get(campo)
             if idx is not None and self.valores and len(self.valores) > idx:
+                valor = self.valores[idx]
                 if campo == "frete":
-                    entry.set(self.valores[idx])
+                    entry.set(valor if valor else "")
                 elif campo == "descricao":
-                    entry.insert("1.0", self.valores[idx])
-                elif campo == "motivo":
-                    entry.insert(0, self.valores[idx])
-                elif campo == "setor_responsavel":
-                    entry.insert(0, self.valores[idx])
+                    entry.insert("1.0", valor if valor else "")
                 else:
-                    entry.insert(0, self.valores[idx])
+                    if isinstance(entry, ttk.Combobox):
+                        entry.set(valor if valor else "")
+                    elif isinstance(entry, ttk.Entry):
+                        entry.insert(0, valor if valor else "")
             entry.grid(row=i, column=1, pady=5, sticky="ew")
             self.entries[campo] = entry
 
-        ttk.Button(frame_editaveis, text="Salvar", command=self.salvar).grid(
-            row=len(campos), column=0, pady=15, sticky="ew")
-        ttk.Button(frame_editaveis, text="Cancelar", command=self.cancel).grid(
-            row=len(campos), column=1, pady=15, sticky="ew")
+    def opcoes_editor(self):
+        self.root.grid_rowconfigure(2, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
 
-        self.root.update_idletasks()
+        frame_opcoesEditor = ttk.LabelFrame(
+            self.root, text="Opções", padding=10)
+        frame_opcoesEditor.grid(row=2, column=0, sticky="nsew", padx=10, pady=10)
 
-        center_window_child(self.root, parent)
+        frame_opcoesEditor.grid_rowconfigure(0, weight=1)
+        frame_opcoesEditor.grid_columnconfigure(2, weight=1)
+
+        ttk.Button(frame_opcoesEditor, text="Salvar", command=self.salvar).grid(
+            row=0, column=0, sticky="e", padx=5, pady=2)
+        ttk.Button(frame_opcoesEditor, text="Cancelar", command=self.cancel).grid(
+            row=0, column=1, sticky="e", padx=5, pady=2)
 
     def obter_setores(self):
         conn = create_connection()
         cursor = conn.cursor()
-    
         cursor.execute("SELECT DISTINCT setor_responsavel FROM bo_records WHERE setor_responsavel IS NOT NULL AND setor_responsavel NOT LIKE ''")
         setores = [row[0] for row in cursor.fetchall()]
-
         cursor.close()
         conn.close()
-
         return setores
-        
+
     def obter_motivos(self):
         conn = create_connection()
         cursor = conn.cursor()
-    
         cursor.execute("SELECT DISTINCT motivo FROM bo_records WHERE motivo IS NOT NULL AND motivo NOT LIKE ''")
         motivos = [row[0] for row in cursor.fetchall()]
-
         cursor.close()
         conn.close()
-
         return motivos
 
     def salvar(self):
         try:
             conn = create_connection()
             cursor = conn.cursor()
-
             update_query = """
                 UPDATE bo_records
                 SET tipo_ocorrencia = ?, motivo = ?, descricao = ?, setor_responsavel = ?, frete = ?
@@ -2226,45 +2298,30 @@ class editar_Bo():
             cursor.execute(update_query, (
                 self.entries["tipo_ocorrencia"].get(),
                 self.entries["motivo"].get(),
-                self.entries["descricao"].get("1.0", tk.END),
+                self.entries["descricao"].get("1.0", tk.END).strip(),
                 self.entries["setor_responsavel"].get(),
                 self.entries["frete"].get(),
                 self.bo_number
             ))
-
             conn.commit()
             messagebox.showinfo("Sucesso", f"BO {self.bo_number} atualizada com sucesso!")
             self.root.destroy()
-            exibir_detalhes_acompanhando.instance.root.destroy()
+            if exibir_detalhes_acompanhando.instance and exibir_detalhes_acompanhando.instance.root.winfo_exists():
+                exibir_detalhes_acompanhando.instance.root.destroy()
 
+            # Atualiza a lista de BOs no módulo que chamou
             if self.ultimo_modulo == "Corporativo":
                 from modulos.corporativo import CorporativoModule
                 if CorporativoModule.instance is not None:
-                    if CorporativoModule.instance is not None:
-                        CorporativoModule.instance.atualizar_bos()
-                    else:
-                        print("Instância do módulo corporativo não encontrada.")
-                else:
-                    pass
+                    CorporativoModule.instance.atualizar_bos()
             elif self.ultimo_modulo == "Varejo":
                 from modulos.varejo import VarejoModule
                 if VarejoModule.instance is not None:
-                    if VarejoModule.instance is not None:
-                        VarejoModule.instance.atualizar_bos()
-                    else:
-                        print("Instância do módulo varejo não encontrada.")
-                else:
-                    pass
+                    VarejoModule.instance.atualizar_bos()
             elif self.ultimo_modulo == "Exportacao":
                 from modulos.exportacao import ExportacaoModule
                 if ExportacaoModule.instance is not None:
-                    if ExportacaoModule.instance is not None:
-                        ExportacaoModule.instance.atualizar_bos()
-                    else:
-                        print("Instância do módulo exportacao não encontrada.")
-                else:
-                    pass
-
+                    ExportacaoModule.instance.atualizar_bos()
         except pyodbc.Error as e:
             messagebox.showerror("Erro", f"Erro ao atualizar BO: {e}")
         finally:
@@ -2274,7 +2331,7 @@ class editar_Bo():
 
     def cancel(self):
         self.root.destroy()
-        
+
 class acompanhar_Bo:
     def __init__(self, parent, tree, caller_id=None, user=None):
         self.user = user
@@ -2377,7 +2434,7 @@ class acompanhar_Bo:
             ("Tipo de Ocorrência", ttk.Entry),
             ("Motivo", ttk.Combobox, self.obter_motivos()),
             ("Setor Responsável", ttk.Combobox, self.obter_setores()),
-            ("Descrição", tk.Text, 1, 5),
+            ("Descrição", tk.Text),
         ]
 
         self.entries_ocorrencia = {}
@@ -2386,6 +2443,8 @@ class acompanhar_Bo:
                 row=i, column=0, sticky=tk.W)
             if widget == ttk.Combobox:
                 entry = widget(frame_ocorrencia, values=args[0])
+            elif widget == tk.Text:
+                entry = widget(frame_ocorrencia, width=30, height=5, font=("Arial", 8))
             else:
                 entry = widget(frame_ocorrencia)
             entry.grid(row=i, column=1, sticky="ew")

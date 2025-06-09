@@ -90,6 +90,7 @@ class Header:
         from funcoes import LoginWindow
         login = LoginWindow(root_principal)
         login.root.after(100, login.root.focus_force)
+        login.root.after(100, login.username.focus_force)
         
 
     def buscar_bo(self):
