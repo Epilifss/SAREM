@@ -1,6 +1,7 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+import ttkbootstrap as tb
 import pyodbc
+from tkinter import messagebox
 from funcoes import *
 from components import *
 from database import create_connection
@@ -29,7 +30,7 @@ class VarejoModule:
         from funcoes import exibir_detalhes_acompanhando
 
         # Lista de BOs
-        self.tree = ttk.Treeview(self.root, columns=(
+        self.tree = tb.Treeview(self.root, columns=(
             "BO", "OP", "Status", "tipo_ocorrencia", "setor_responsavel", "motivo"), show="headings")
         self.tree.heading("BO", text="BO")
         self.tree.heading("OP", text="OP")
