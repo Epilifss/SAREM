@@ -1,6 +1,7 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
 import pyodbc
+import ttkbootstrap as tb
+from tkinter import messagebox
 from database import create_connection
 
 # Cabeçalho dos módulos
@@ -14,40 +15,40 @@ class Header:
         self.ultimo_modulo = caller_id
         self.tree = tree
 
-        header = ttk.Frame(self.parent)
+        header = tb.Frame(self.parent)
         header.pack(fill=tk.X)
 
-        ttk.Button(header, text="Embarcados", command=self.abrir_embarcados).pack(side=tk.LEFT)
-        ttk.Button(header, text="Estatísticas", command=self.abrir_estatisticas).pack(side=tk.LEFT)
-        ttk.Button(header, text="Gerar Relatório", command=self.abrir_relatorios).pack(side=tk.LEFT)
-        ttk.Button(header, text="Gerar Nova BO", command=self.abrir_gerar_bo).pack(side=tk.LEFT)
-        ttk.Button(header, text="Logoff", command=self.logoff).pack(side=tk.RIGHT)
-        ttk.Button(header, text="Atualizar", command=lambda: self.carregar_bos()).pack(side=tk.RIGHT)
-        ttk.Button(header, text="Buscar BO", command=self.abrir_buscar_bo).pack(side=tk.RIGHT)
+        tb.Button(header, text="Embarcados", command=self.abrir_embarcados).pack(side=tk.LEFT)
+        tb.Button(header, text="Estatísticas", command=self.abrir_estatisticas).pack(side=tk.LEFT)
+        tb.Button(header, text="Gerar Relatório", command=self.abrir_relatorios).pack(side=tk.LEFT)
+        # tb.Button(header, text="Gerar Nova BO", command=self.abrir_gerar_bo).pack(side=tk.LEFT)
+        tb.Button(header, text="Atualizar", command=lambda: self.carregar_bos()).pack(side=tk.LEFT)
+        tb.Button(header, text="Acompanhar uma BO", command=self.abrir_buscar_bo).pack(side=tk.LEFT)
+        tb.Button(header, text="Logoff", command=self.logoff).pack(side=tk.RIGHT)
 
     def abrir_embarcados(self):
-        from telas import Embarcados
+        from funcoes import Embarcados
         janela = Embarcados(self.parent, caller_id=self.ultimo_modulo)
         self.parent.wait_window(janela.root)
 
     def abrir_estatisticas(self):
-        from telas import Estatisticas
+        from funcoes import Estatisticas
         janela = Estatisticas(self.parent, caller_id=self.ultimo_modulo)
         self.parent.wait_window(janela.root)
 
     def abrir_relatorios(self):
-        from telas import Relatorios
+        from funcoes import Relatorios
         janela = Relatorios(self.parent, caller_id=self.ultimo_modulo)
         self.parent.wait_window(janela.root)
 
     def abrir_gerar_bo(self):
-        from telas import gerarBO
+        from funcoes import gerarBO
         janela = gerarBO(self.parent, caller_id=self.ultimo_modulo)
         self.parent.wait_window(janela.root)
 
     def abrir_buscar_bo(self):
-        from telas import buscarBo
-        janela = buscarBo(self.parent, caller_id=self.ultimo_modulo)
+        from funcoes import buscarBo
+        janela = buscarBo(self.parent, caller_id=self.ultimo_modulo, user=self.user)
         self.parent.wait_window(janela.root)
 
     def carregar_bos(self):
@@ -57,7 +58,7 @@ class Header:
 
         try:
             cursor = conn.cursor()
-            query = ("SELECT bo_number, op, status, tipo_ocorrencia, setor_responsavel, motivo FROM bo_records WHERE status NOT LIKE 'Embarcado' AND modulo LIKE ?")
+            query = ("SELECT bo_number, op, status, tipo_ocorrencia, setor_responsavel, motivo FROM bo_records WHERE status NOT LIKE 'Embarcado' AND modulo LIKE ? AND D_E_L_E_T_ <> '*'")
             cursor.execute(query, self.ultimo_modulo)
             rows = cursor.fetchall()
 
@@ -85,14 +86,17 @@ class Header:
                 conn.close()
 
     def logoff(self):
+        root_principal = self.parent.master
         self.parent.destroy()
-        from telas import LoginWindow
-        LoginWindow()
+        from funcoes import LoginWindow, monitorar_bo_event
+        monitorar_bo_event.set()
+        login = LoginWindow(root_principal)
+        login.root.after(100, login.root.focus_force)
+        login.root.after(100, login.username.focus_force)
         
 
     def buscar_bo(self):
-        from telas import buscarBo
-
+        from funcoes import buscarBo
         obj = buscarBo(parent=self.parent, caller_id=self.ultimo_modulo)
         resultado = obj.identificar_chamador()
         print(resultado)
@@ -104,17 +108,17 @@ class SearchBar:
         self.search_command = search_command
         self.clear_command = clear_command
 
-        self.frame = ttk.Frame(self.parent)
+        self.frame = tb.Frame(self.parent)
         self.frame.pack(fill=tk.X)
 
-        self.search_entry = ttk.Entry(self.frame)
+        self.search_entry = tb.Entry(self.frame)
         self.search_entry.pack(side=tk.LEFT, expand=True, fill=tk.X)
 
-        self.search_button = ttk.Button(
+        self.search_button = tb.Button(
             self.frame, text="Buscar", command=self.search_command)
         self.search_button.pack(side=tk.LEFT)
 
-        self.clear_button = ttk.Button(
+        self.clear_button = tb.Button(
             self.frame, text="Limpar", command=self.clear_command)
         self.clear_button.pack_forget()
 

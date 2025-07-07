@@ -1,6 +1,6 @@
 # Bibliotecas
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+import ttkbootstrap as tb
 import threading
 import time
 import pyodbc
@@ -13,6 +13,10 @@ import datetime
 import matplotlib.pyplot as plt
 import pandas as pd
 import configparser
+import requests
+from tkinter import messagebox, filedialog
+from ttkbootstrap import Style
+from ttkbootstrap.constants import *
 from moviepy import VideoFileClip
 from PIL import Image, ImageTk
 from matplotlib.figure import Figure
@@ -41,17 +45,103 @@ from modulos.exportacao import ExportacaoModule
 from database import create_connection_Protheus
 from database import create_connection
 
-# Estilos
+# Funções
+
+def center_window_screen(win, width=350, height=100):
+    win.update_idletasks()
+    screen_width = win.winfo_screenwidth()
+    screen_height = win.winfo_screenheight()
+    x = (screen_width // 2) - (width // 2)
+    y = (screen_height // 2) - (height // 2)
+    win.geometry(f"{width}x{height}+{x}+{y}")
 
 def resource_path(relative_path):
-    """Retorna o caminho absoluto para o recurso, funciona para dev e PyInstaller."""
     if hasattr(sys, '_MEIPASS'):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.abspath("."), relative_path)
 
+VERSAO_ATUAL = "1.0.2"
+URL_VERSAO = "https://dl.dropboxusercontent.com/scl/fi/dh936k1ph0m2eq5low9gn/versao.txt?rlkey=fnyxw89yee7ai571ue3znbaiv&st=xd9f26ij&dl=0"
+URL_DOWNLOAD = "https://dl.dropboxusercontent.com/scl/fi/lm41ku5uvts7nsa6we01w/Instalador_SAREM.exe?rlkey=2jwgcq2pst9i8xoo5r8l1cxtg&st=yzzgbd9k&dl=0"
+
+def verificar_e_att(parent):
+    try:
+        resposta = requests.get(URL_VERSAO, timeout=5)
+        if resposta.status_code == 200:
+            versao_remota = resposta.text.strip()
+            if versao_remota > VERSAO_ATUAL:
+                resp = messagebox.askyesno(
+                    "SAREM - Atualização disponível",
+                    f"Uma nova versão está disponível.\nDeseja atualizar agora?"
+                )
+                if not resp:
+                    return True
+
+                # Janela de progresso
+                progress_win = tk.Toplevel(parent)
+                progress_win.title("Baixando atualização")
+                progress_win.iconbitmap(resource_path('SAREM.ico'))
+                progress_win.geometry("350x100")
+                progress_win.transient(parent)
+                progress_win.grab_set()
+                tb.Label(progress_win, text="Baixando nova versão...").pack(pady=10)
+                progress = tb.Progressbar(progress_win, orient="horizontal", length=300, mode="determinate")
+                progress.pack(pady=10)
+                progress["value"] = 0
+
+                center_window_screen(progress_win, 350, 100)
+
+                temp_dir = tempfile.gettempdir()
+                caminho_instalador = os.path.join(temp_dir, "atualizacao.exe")
+                r = requests.get(URL_DOWNLOAD, stream=True)
+                total = int(r.headers.get('content-length', 0))
+                chunk_size = 8192
+                baixado = 0
+                f = open(caminho_instalador, 'wb')
+                chunks = r.iter_content(chunk_size=chunk_size)
+
+                def baixar_pedaco():
+                    nonlocal baixado
+                    try:
+                        chunk = next(chunks)
+                        if chunk:
+                            f.write(chunk)
+                            baixado += len(chunk)
+                            if total:
+                                valor = (baixado / total) * 100
+                                progress["value"] = valor
+                            progress_win.update_idletasks()
+                        progress_win.after(1, baixar_pedaco)
+                    except StopIteration:
+                        f.close()
+                        progress_win.destroy()
+                        if os.path.exists(caminho_instalador):
+                            messagebox.showinfo("Atualização", "Download concluído! O instalador será aberto.")
+                            print(f"Tentando abrir o instalador: {caminho_instalador}")
+                            try:
+                                subprocess.Popen(['explorer', caminho_instalador])
+                            except Exception as e:
+                                messagebox.showerror("Erro", f"Não foi possível abrir o instalador:\n{e}")
+                            parent.quit()
+                        else:
+                            messagebox.showerror("Erro", "O instalador não foi baixado corretamente.")
+
+                baixar_pedaco()
+                progress_win.transient()
+                progress_win.grab_set()
+                progress_win.wait_window()
+                return False
+
+        return True
+    except requests.RequestException as e:
+        print(f"Erro ao verificar atualização: {e}")
+        return True
+
+monitorar_bo_event = threading.Event()
+
 def monitorar_bo_embarcadas():
     def tarefa():
-        while True:
+        while not monitorar_bo_event.is_set():
             try:
                 horario = datetime.datetime.now()
                 hora = (f"as {horario.hour}:{horario.minute}")
@@ -93,8 +183,11 @@ def monitorar_bo_embarcadas():
                 conn_Protheus.close()
             except Exception as e:
                 print(f"Erro ao monitorar BOs embarcadas: {e}")
-            time.sleep(60)
+            if monitorar_bo_event.wait(60):
+                print("Monitoramento de BOs embarcadas interrompido.")
+                break
 
+    monitorar_bo_event.clear()
     threading.Thread(target=tarefa, daemon=True).start()
 
 def center_window(self):
@@ -141,12 +234,15 @@ CONFIG_PATH = get_config_path()
 class ConfigEditor:
     def __init__(self, parent_login=None):
         self.parent_login = parent_login
-        self.root = tk.Tk()
+        self.root = tk.Toplevel(parent_login)
         self.root.title("Configuração do Banco de Dados")
         self.root.iconbitmap(resource_path('SAREM.ico'))
         self.root.minsize(400, 300)
         self.root.resizable(False, False)
-        self.root.focus_set()
+        self.root.transient(parent_login)
+        self.root.grab_set()
+
+        self.root.protocol("WM_DELETE_WINDOW", self.cancelar)
 
         self.config = configparser.ConfigParser()
         self.config.read(CONFIG_PATH)
@@ -170,21 +266,27 @@ class ConfigEditor:
         self.entries_db = {}
         self.entries_mik = {}
 
-        frame = ttk.Frame(self.root, padding=20)
-        frame.pack(expand=True, fill=tk.BOTH)
+        frame = tb.Frame(self.root, padding=20)
+        frame.pack(expand=True, fill=tk.BOTH, anchor="center")
 
-        ttk.Label(frame, text="Banco de Dados SAREM", font=("Arial", 10, "bold")).grid(row=0, column=0, columnspan=2, pady=(0, 10))
-        for i, (campo, label) in enumerate(campos_db):
-            ttk.Label(frame, text=label + ":").grid(row=i+1, column=0, sticky=tk.W, pady=5)
-            entry = ttk.Entry(frame, width=30, show="*" if campo == "password" else "")
-            entry.grid(row=i+1, column=1, pady=5)
+        # SAREM
+        tb.Label(frame, text="Banco de Dados SAREM", font=("Arial", 10, "bold")).pack(pady=(0, 10))
+        for campo, label in campos_db:
+            row = tb.Frame(frame)
+            row.pack(fill="x", pady=3)
+            tb.Label(row, text=label + ":", width=15, anchor="w").pack(side="left")
+            entry = tb.Entry(row, width=30, show="*" if campo == "password" else "")
+            entry.pack(side="left", padx=5)
             self.entries_db[campo] = entry
 
-        ttk.Label(frame, text="Banco Protheus", font=("Arial", 10, "bold")).grid(row=len(campos_db)+1, column=0, columnspan=2, pady=(20, 10))
-        for i, (campo, label) in enumerate(campos_prot):
-            ttk.Label(frame, text=label + ":").grid(row=len(campos_db)+2+i, column=0, sticky=tk.W, pady=5)
-            entry = ttk.Entry(frame, width=30, show="*" if campo == "password" else "")
-            entry.grid(row=len(campos_db)+2+i, column=1, pady=5)
+        # Protheus
+        tb.Label(frame, text="Banco Protheus", font=("Arial", 10, "bold")).pack(pady=(20, 10))
+        for campo, label in campos_prot:
+            row = tb.Frame(frame)
+            row.pack(fill="x", pady=3)
+            tb.Label(row, text=label + ":", width=15, anchor="w").pack(side="left")
+            entry = tb.Entry(row, width=30, show="*" if campo == "password" else "")
+            entry.pack(side="left", padx=5)
             self.entries_mik[campo] = entry
 
         # Carrega valores atuais
@@ -197,17 +299,19 @@ class ConfigEditor:
                 valor = self.config["Protheus"].get(campo, "")
                 self.entries_mik[campo].insert(0, valor)
 
-        row_btn = len(campos_db) + len(campos_prot) + 2
-        ttk.Button(frame, text="Salvar", command=self.salvar).grid(row=row_btn, column=0, pady=15, sticky="ew")
-        ttk.Button(frame, text="Cancelar", command=self.cancelar).grid(row=row_btn, column=1, pady=15, sticky="ew")
+        # Botões
+        btn_frame = tb.Frame(frame)
+        btn_frame.pack(pady=15)
+        tb.Button(btn_frame, text="Salvar", command=self.salvar, style="custom.TButton", width=15).pack(side="left", padx=10)
+        tb.Button(btn_frame, text="Cancelar", command=self.cancelar, style="custom.TButton", width=15).pack(side="left", padx=10)
 
         center_window(self)
-        self.root.mainloop()
+        self.root.after(100, lambda: self.entries_db["server"].focus_set())
 
     def cancelar(self):
         self.root.destroy()
         try:
-            if hasattr(self, 'parent_login') and self.parent_login:
+            if self.parent_login:
                 self.parent_login.deiconify()
         except Exception:
             pass
@@ -227,58 +331,126 @@ class ConfigEditor:
             messagebox.showinfo("Sucesso", "Configuração salva com sucesso!")
             self.root.destroy()
             try:
-                if hasattr(self, 'parent_login') and self.parent_login:
+                if self.parent_login:
                     self.parent_login.deiconify()
             except Exception:
                 pass
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao salvar: {e}")
 
+class DialogSenhaAdmin:
+    def __init__(self, parent):
+        self.result = None
+        self.root = tk.Toplevel(parent)
+        self.root.title("Senha de administrador")
+        self.root.iconbitmap(resource_path('SAREM.ico'))
+        self.root.transient(parent)
+        self.root.focus_set()
+        self.root.resizable(False, False)
+
+        frame = tb.Frame(self.root, padding=20)
+        frame.pack(expand=True, fill="both")
+
+        tb.Label(frame, text="Digite a senha de administrador para acessar as configurações:").pack(pady=(0, 10))
+        self.entry = tb.Entry(frame, show="*", width=25)
+        self.entry.pack(pady=5)
+        self.entry.focus_set()
+
+        btn_frame = tb.Frame(frame)
+        btn_frame.pack(pady=10)
+        tb.Button(btn_frame, text="OK", width=10, command=self.ok, style="custom.TButton").pack(side="left", padx=5)
+        tb.Button(btn_frame, text="Cancelar", width=10, command=self.cancel, style="custom.TButton").pack(side="left", padx=5)
+
+        self.root.bind('<Return>', lambda event: self.ok())
+        self.root.bind('<Escape>', lambda event: self.cancel())
+
+        center_window(self)
+        self.root.wait_window()
+
+    def ok(self):
+        self.result = self.entry.get()
+        self.root.destroy()
+
+    def cancel(self):
+        self.result = None
+        self.root.destroy()
+
 class LoginWindow:
-    def __init__(self):
-        self.root = tk.Tk()
+    def __init__(self, parent):
+        self.parent = parent
+        self.root = tk.Toplevel(parent)
         self.root.title("SAREM")
         self.root.iconbitmap(resource_path('SAREM.ico'))
-        self.root.geometry("300x200")
+        # self.root.geometry("350x300")
+        self.root.geometry("1000x600")
+        self.root.state('zoomed')
         self.root.focus_set()
 
-        self.frame = ttk.Frame(self.root, padding=10)
-        self.frame.pack(expand=True)
+        self.root.protocol("WM_DELETE_WINDOW", parent.destroy)
+
+        self.frame = tb.Frame(self.root, padding=10)
+        self.frame.pack(expand=True, fill="both")
+
+        # Frame Campos de entrada
+        campos_frame = tb.Frame(self.frame)
+        campos_frame.pack(pady=200, expand=True, anchor="center")
+        
+        rodape_frame = tb.Frame(self.frame)
+        rodape_frame.pack(pady=0, expand=True, anchor="se")
+        tb.Label(rodape_frame, text=f"Versão {VERSAO_ATUAL}").pack(side="right", padx=5)
 
         logo_img = Image.open(resource_path('SAREM PNG.png'))
-        logo_img = logo_img.resize((150, 50), Image.LANCZOS)
+        logo_img = logo_img.resize((250, 80), Image.LANCZOS)
         self.logo_photo = ImageTk.PhotoImage(logo_img)
-        ttk.Label(self.frame, image=self.logo_photo).grid(row=0, column=0, columnspan=2, pady=(0, 10))
+        tb.Label(campos_frame, image=self.logo_photo).pack(pady=(0, 10))
 
-        ttk.Label(self.frame, text="Usuário:").grid(
-            row=1, column=0, sticky=tk.W)
-        self.username = ttk.Entry(self.frame)
-        self.username.grid(row=1, column=1)
 
-        ttk.Label(self.frame, text="Senha:").grid(row=2, column=0, sticky=tk.W)
-        self.password = ttk.Entry(self.frame, show="*")
-        self.password.grid(row=2, column=1)
+        # Usuário
+        user_text = tb.Frame(campos_frame)
+        user_text.pack(fill="both", pady=1, expand=True, side="top")
+        tb.Label(user_text, text="Usuário:", width=10, anchor="w").pack(side="left", padx=0)
+        # Entry para o usuário
+        user_entry = tb.Frame(campos_frame)
+        user_entry.pack(fill="both", pady=1, expand=True)
+        self.username = tb.Entry(user_entry, width=40)
+        self.username.pack(side="left", padx=0)
 
-        self.login_btn = ttk.Button(self.frame, text="Login", command=self.login)
-        self.login_btn.grid(row=3, column=0, columnspan=2, pady=5)
+        # Senha
+        pass_text = tb.Frame(campos_frame)
+        pass_text.pack(fill="both", pady=1, expand=True, side="top")
+        tb.Label(pass_text, text="Senha:", width=10, anchor="w").pack(side="left")
+        # Entry para a senha
+        pass_entry = tb.Frame(campos_frame)
+        pass_entry.pack(fill="both", pady=1)
+        self.password = tb.Entry(pass_entry, show="*", width=40)
+        self.password.pack(side="left", padx=0)
 
-        self.config_btn = ttk.Button(
-            self.frame, text="Configurar Banco", command=self.abrir_config)
-        self.config_btn.grid(row=4, column=0, columnspan=2, pady=5)
+        # Botões
+        btn_frame = tb.Frame(campos_frame)
+        btn_frame.pack(pady=5, expand=True, anchor="center")
+
+        self.login_btn = tb.Button(btn_frame, text="Login", width=17, command=self.login, style="custom.TButton")
+        self.login_btn.pack(side="left", padx=1)
+
+        self.config_btn = tb.Button(btn_frame, text="Configurar Banco", width=17, command=self.abrir_config, style="custom.TButton")
+        self.config_btn.pack(side="right", padx=1)
 
         center_window(self)
         self.username.focus_set()
         self.root.bind('<Return>', self.login)
-        self.root.mainloop()
 
     def abrir_config(self):
-        self.root.withdraw()
-        editor = ConfigEditor(self.root)
-        self.root.wait_window(editor.root)
-        try:
-            self.root.deiconify()
-        except tk.TclError:
-            pass
+        dialog = DialogSenhaAdmin(self.root)
+        senha = dialog.result
+        correta = "4dmin123@4"
+        if senha == "":
+            messagebox.showerror("Erro", "Insira uma senha para continuar")
+        elif senha == None:
+            return
+        elif senha != correta:
+            messagebox.showerror("Acesso negado", "Senha incorreta!")
+        elif senha == correta:
+            ConfigEditor(self.root)
     
     def admin_login(self):
         self.username.delete(0, tk.END)
@@ -322,24 +494,24 @@ class LoginWindow:
                 if user[4]:  # is_admin
                     self.root.destroy()
                     print(printUser + "painel de administração " + hora)
-                    AdminPanel()
+                    AdminPanel(self.parent)
                 else:
                     module = user[3]
                     if (module) == '0':
                         self.root.destroy()
                         print(printUser + "módulo Corporativo " + hora)
                         monitorar_bo_embarcadas()
-                        CorporativoModule(user)
+                        CorporativoModule(user, self.parent)
                     elif (module) == '1':
                         self.root.destroy()
                         print(printUser + "módulo Varejo " + hora)
                         monitorar_bo_embarcadas()
-                        VarejoModule(user)
+                        VarejoModule(user, self.parent)
                     elif (module) == '2':
                         self.root.destroy()
                         print(printUser + "módulo Exportação " + hora)
                         monitorar_bo_embarcadas()
-                        ExportacaoModule(user)
+                        ExportacaoModule(user, self.parent)
                     else:
                         messagebox.showerror(
                             "Erro", "Módulo do usuário não encontrado. Contate o administrador.")
@@ -355,34 +527,36 @@ class LoginWindow:
 
 
 class AdminPanel:
-    def __init__(self):
-        self.root = tk.Tk()
+    def __init__(self, parent):
+        self.root = tk.Toplevel(parent)
         self.root.title("Painel de Administração")
         self.root.iconbitmap(resource_path('SAREM.ico'))
+
+        self.root.protocol("WM_DELETE_WINDOW", parent.destroy)
 
         self.root.state('zoomed')
 
         # Abas
-        self.notebook = ttk.Notebook(self.root)
+        self.notebook = tb.Notebook(self.root)
 
         # Aba de Usuários
-        self.user_frame = ttk.Frame(self.notebook)
+        self.user_frame = tb.Frame(self.notebook)
         self.notebook.add(self.user_frame, text="Usuários")
 
-        header = ttk.Frame(self.user_frame)
+        header = tb.Frame(self.user_frame)
         header.pack(fill=tk.X)
 
-        ttk.Button(header, text="Novo Usuário",
+        tb.Button(header, text="Novo Usuário",
                    command=self.novo_usuario).pack(side=tk.LEFT)
-        ttk.Button(header, text="Excluir Usuário",
+        tb.Button(header, text="Excluir Usuário",
                    command=self.excluir_usuario).pack(side=tk.LEFT)
-        ttk.Button(header, text="Editar Usuário",
+        tb.Button(header, text="Editar Usuário",
                    command=self.editar_usuario).pack(side=tk.LEFT)
-        ttk.Button(header, text="Logoff",
+        tb.Button(header, text="Logoff",
                    command=self.logoff).pack(side=tk.RIGHT)
         
         # Lista de usuários
-        self.tree = ttk.Treeview(self.user_frame, columns=(
+        self.tree = tb.Treeview(self.user_frame, columns=(
             "ID", "Usuário", "Módulo", "Admin"), show="headings")
         self.tree.heading("ID", text="ID")
         self.tree.heading("Usuário", text="Usuário")
@@ -394,13 +568,12 @@ class AdminPanel:
         self.tree.bind("<<TreeviewSelect>>", self.atualizar_selecao)
 
         # Aba de Database
-        self.db_frame = ttk.Frame(self.notebook)
+        self.db_frame = tb.Frame(self.notebook)
         self.notebook.add(self.db_frame, text="Banco de Dados")
         self.criar_formulario_db()
 
         self.notebook.pack(expand=True, fill=tk.BOTH)
         self.carregar_usuarios()
-        self.root.mainloop()
 
     def carregar_usuarios(self):
         conn = create_connection()
@@ -521,20 +694,20 @@ class AdminPanel:
         self.db_entries = {}
         self.mik_entries = {}
 
-        frame = ttk.Frame(self.db_frame, padding=20)
+        frame = tb.Frame(self.db_frame, padding=20)
         frame.pack(expand=True, fill=tk.BOTH)
 
-        ttk.Label(frame, text="Banco de Dados SAREM", font=("Arial", 10, "bold")).grid(row=0, column=0, columnspan=2, pady=(0, 10))
+        tb.Label(frame, text="Banco de Dados SAREM", font=("Arial", 10, "bold")).grid(row=0, column=0, columnspan=2, pady=(0, 10))
         for i, (campo, label) in enumerate(campos_db):
-            ttk.Label(frame, text=label + ":").grid(row=i+1, column=0, sticky=tk.W, pady=5)
-            entry = ttk.Entry(frame, width=30, show="*" if campo == "password" else "")
+            tb.Label(frame, text=label + ":").grid(row=i+1, column=0, sticky=tk.W, pady=5)
+            entry = tb.Entry(frame, width=30, show="*" if campo == "password" else "")
             entry.grid(row=i+1, column=1, pady=5)
             self.db_entries[campo] = entry
 
-        ttk.Label(frame, text="Banco Protheus", font=("Arial", 10, "bold")).grid(row=len(campos_db)+1, column=0, columnspan=2, pady=(20, 10))
+        tb.Label(frame, text="Banco Protheus", font=("Arial", 10, "bold")).grid(row=len(campos_db)+1, column=0, columnspan=2, pady=(20, 10))
         for i, (campo, label) in enumerate(campos_prot):
-            ttk.Label(frame, text=label + ":").grid(row=len(campos_db)+2+i, column=0, sticky=tk.W, pady=5)
-            entry = ttk.Entry(frame, width=30, show="*" if campo == "password" else "")
+            tb.Label(frame, text=label + ":").grid(row=len(campos_db)+2+i, column=0, sticky=tk.W, pady=5)
+            entry = tb.Entry(frame, width=30, show="*" if campo == "password" else "")
             entry.grid(row=len(campos_db)+2+i, column=1, pady=5)
             self.mik_entries[campo] = entry
 
@@ -548,8 +721,8 @@ class AdminPanel:
                 self.mik_entries[campo].insert(0, valor)
 
         row_btn = len(campos_db) + len(campos_prot) + 2
-        ttk.Button(frame, text="Salvar", command=self.salvar_config_db).grid(row=row_btn, column=0, pady=15, sticky="ew")
-        ttk.Button(frame, text="Cancelar", command=self.cancelar_config_db).grid(row=row_btn, column=1, pady=15, sticky="ew")
+        tb.Button(frame, text="Salvar", command=self.salvar_config_db).grid(row=row_btn, column=0, pady=15, sticky="ew")
+        tb.Button(frame, text="Cancelar", command=self.cancelar_config_db).grid(row=row_btn, column=1, pady=15, sticky="ew")
 
     def salvar_config_db(self):
         CONFIG_PATH = get_config_path()
@@ -578,9 +751,14 @@ class AdminPanel:
             valor = self.db_config["Protheus"].get(campo, "")
             entry.insert(0, valor)
 
-    def logoff(self):
+    def logoff(self, parent=None):
+        global monitorar_bo_event
+        monitorar_bo_event.set()
+        if parent is None:
+            parent = self.root
         self.root.destroy()
-        LoginWindow()
+        login_win = LoginWindow(parent.master if hasattr(parent, 'master') else parent)
+        login_win.root.after(100, lambda: (login_win.root.focus_force(), login_win.username.focus_set()))
 
 
 class NovoUsuarioWindow:
@@ -596,29 +774,29 @@ class NovoUsuarioWindow:
         campos = ["Usuário", "Senha", "Módulo", "Admin"]
         self.entries = {}
 
-        content = ttk.Frame(self.root, padding=20)
+        content = tb.Frame(self.root, padding=20)
         content.grid(row=0, column=0, sticky="nsew")
         self.root.grid_rowconfigure(0, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
 
         for i, campo in enumerate(campos):
-            ttk.Label(content, text=f"{campo}:").grid(
+            tb.Label(content, text=f"{campo}:").grid(
             row=i, column=0, sticky=tk.W, padx=10, pady=8
             )
             if campo == "Senha":
-                entry = ttk.Entry(content, show="*")
+                entry = tb.Entry(content, show="*")
             elif campo == "Admin":
-                entry = ttk.Combobox(content, values=["Sim", "Não"], state="readonly")
+                entry = tb.Combobox(content, values=["Sim", "Não"], state="readonly")
             elif campo == "Módulo":
-                entry = ttk.Combobox(content, values=[
+                entry = tb.Combobox(content, values=[
                 "Corporativo", "Varejo", "Exportação"], state="readonly")
             else:
-                entry = ttk.Entry(content)
+                entry = tb.Entry(content)
 
             entry.grid(row=i, column=1, padx=10, pady=8)
             self.entries[campo] = entry
 
-        ttk.Button(content, text="Salvar", command=self.salvar).grid(
+        tb.Button(content, text="Salvar", command=self.salvar).grid(
             row=len(campos), column=0, columnspan=2, pady=(15, 0)
         )
 
@@ -675,33 +853,33 @@ class EditarUsuarioWindow:
         campos = ["Usuário", "Senha", "Módulo", "Admin"]
         self.entries = {}
 
-        content = ttk.Frame(self.root, padding=20)
+        content = tb.Frame(self.root, padding=20)
         content.grid(row=0, column=0, sticky="nsew")
         self.root.grid_rowconfigure(0, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
 
         for i, campo in enumerate(campos):
-            ttk.Label(content, text=f"{campo}:").grid(
+            tb.Label(content, text=f"{campo}:").grid(
             row=i, column=0, sticky=tk.W, padx=10, pady=8
             )
 
             if campo == "Admin":
-                entry = ttk.Combobox(content, values=["Sim", "Não"], state="readonly")
+                entry = tb.Combobox(content, values=["Sim", "Não"], state="readonly")
                 entry.set("Sim" if self.user_data[3] == "Sim" else "Não")
             elif campo == "Senha":
-                entry = ttk.Entry(content, show="*")
+                entry = tb.Entry(content, show="*")
             elif campo == "Módulo":
-                entry = ttk.Combobox(content, values=[
+                entry = tb.Combobox(content, values=[
                     "Corporativo", "Varejo", "Exportação"], state="readonly")
                 entry.set(self.user_data[2])
             else:
-                entry = ttk.Entry(content)
+                entry = tb.Entry(content)
             if campo == "Usuário":
                 entry.insert(0, self.user_data[1])
             entry.grid(row=i, column=1, padx=10, pady=8)
             self.entries[campo] = entry
 
-        ttk.Button(content, text="Salvar", command=self.salvar).grid(
+        tb.Button(content, text="Salvar", command=self.salvar).grid(
             row=len(campos), column=0, columnspan=2, pady=(15, 0)
         )
 
@@ -772,10 +950,10 @@ class Embarcados(TreeViewHelper):
         print(self.identificar_chamador())
 
         # Cabeçalho
-        header = ttk.Frame(self.root)
+        header = tb.Frame(self.root)
         header.pack(fill=tk.X)
 
-        ttk.Button(header, text="Fechar",
+        tb.Button(header, text="Fechar",
                    command=lambda: self.root.destroy()).pack(side=tk.RIGHT)
 
         # Barra de pesquisa
@@ -783,7 +961,7 @@ class Embarcados(TreeViewHelper):
             self.root, self.pesquisar_bo, self.clear_search)
 
         # Lista de BOs
-        self.tree = ttk.Treeview(self.root, columns=(
+        self.tree = tb.Treeview(self.root, columns=(
             "BO", "OP", "Status", "tipo_ocorrencia", "dt_embarque"), show="headings")
         self.tree.heading("BO", text="BO")
         self.tree.heading("OP", text="OP")
@@ -797,7 +975,6 @@ class Embarcados(TreeViewHelper):
                        self.tree, caller_id="Corporativo"))
 
         self.carregar_bos()
-        self.root.mainloop()
 
     def identificar_chamador(self):
         if self.ultimo_modulo is None:
@@ -909,20 +1086,20 @@ class Estatisticas:
         self.ano_atual = "Todos"
 
         # Cabeçalho
-        header = ttk.Frame(self.root)
+        header = tb.Frame(self.root)
         header.pack(fill=tk.X, padx=10, pady=10)
 
-        ttk.Label(header, text="Ano: ").pack(side=tk.LEFT)
-        self.listaAnos = ttk.Combobox(header, values=self.anos, state="readonly")
+        tb.Label(header, text="Ano: ").pack(side=tk.LEFT)
+        self.listaAnos = tb.Combobox(header, values=self.anos, state="readonly")
         self.listaAnos.pack(side=tk.LEFT)
         self.listaAnos.set(self.ano_atual)
         self.listaAnos.bind("<<ComboboxSelected>>", self.atualizar_grafico)
         
-        ttk.Button(header, text="Fechar",
+        tb.Button(header, text="Fechar",
                    command=lambda: self.root.destroy()).pack(side=tk.RIGHT)
         
         # Gráfico
-        self.frame = ttk.Frame(self.root, padding="3 3 12 12")
+        self.frame = tb.Frame(self.root, padding="3 3 12 12")
         self.frame.pack(fill=tk.BOTH, expand=True)
         self.fig = Figure(figsize=(8, 6), dpi=100)
         self.ax = self.fig.add_subplot(111)
@@ -931,7 +1108,6 @@ class Estatisticas:
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         self.atualizar_grafico()
 
-        self.root.mainloop()
         
     def identificar_chamador(self):
         if self.ultimo_modulo is None:
@@ -1033,65 +1209,75 @@ class Relatorios(TreeViewHelper):
         self.motivos = self.motivo()
         self.clientes = self.cliente()
 
-        frame_relat = ttk.Labelframe(self.root, text="Critérios de Busca", padding=10)
+        frame_relat = tb.Labelframe(self.root, text="Critérios de Busca", padding=10)
         frame_relat.grid(row=0, column=0, sticky="n", padx=10, pady=10)
 
         frame_relat.grid_rowconfigure(0, weight=1)
         frame_relat.grid_columnconfigure(0, weight=1)
 
-        tree_frame = ttk.Frame(self.root)
+        tree_frame = tb.Frame(self.root)
         tree_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
 
         tree_frame.grid_rowconfigure(0, weight=1)
         tree_frame.grid_columnconfigure(0, weight=1)
         
         # Lista de BOs Treeview
-        self.tree = ttk.Treeview(tree_frame, columns=(
-            "BO", "OP", "loja", "tipo_ocorrencia", "setor_responsavel", "motivo"), show="headings")
+        self.tree = tb.Treeview(
+            tree_frame,
+            columns=("BO", "OP", "loja", "tipo_ocorrencia", "setor_responsavel", "motivo"),
+            show="headings"
+        )
         self.tree.heading("BO", text="BO")
         self.tree.heading("OP", text="OP")
         self.tree.heading("loja", text="Cliente")
         self.tree.heading("tipo_ocorrencia", text="Tipo de Ocorrência")
         self.tree.heading("setor_responsavel", text="Setor Responsável")
         self.tree.heading("motivo", text="Motivo")
+        self.tree.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
         # Barra de rolagem vertical
-        v_scrollbar = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        v_scrollbar = tb.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=v_scrollbar.set)
 
         self.tree.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         v_scrollbar.grid(row=0, column=1, sticky="ns")
 
+        self.meses = ["Todos"] + [f"{i:02d}" for i in range(1, 13)]
+
         # Campos de Filtros
 
         # Clientes
         tk.Label(frame_relat, text="Cliente:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
-        self.clientes_combobox = ttk.Combobox(frame_relat, values=self.clientes, state="readonly")
+        self.clientes_combobox = tb.Combobox(frame_relat, values=self.clientes, state="readonly")
         self.clientes_combobox.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
         self.clientes_combobox.set("Todos")
 
         # Setores
         tk.Label(frame_relat, text="Setor:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
-        self.setores_combobox = ttk.Combobox(frame_relat, values=self.setores, state="readonly")
+        self.setores_combobox = tb.Combobox(frame_relat, values=self.setores, state="readonly")
         self.setores_combobox.grid(row=1, column=1, padx=5, pady=5)
         self.setores_combobox.set("Todos")
 
         # Motivos
         tk.Label(frame_relat, text="Motivo:").grid(row=2, column=0, sticky=tk.W, padx=5, pady=5)
-        self.motivos_combobox = ttk.Combobox(frame_relat, values=self.motivos, state="readonly")
+        self.motivos_combobox = tb.Combobox(frame_relat, values=self.motivos, state="readonly")
         self.motivos_combobox.grid(row=2, column=1, padx=5, pady=5)
         self.motivos_combobox.set("Todos")
 
+        # Meses
+        tk.Label(frame_relat, text="Mês:").grid(row=3, column=0, sticky=tk.W, padx=5, pady=5)
+        self.meses_combobox = tb.Combobox(frame_relat, values=self.meses, state="readonly")
+        self.meses_combobox.grid(row=3, column=1, padx=5, pady=5)
+        self.meses_combobox.set("Todos")
+
         # Botão Gerar Relatório
-        ttk.Button(frame_relat, text="Gerar Relatório", command=self.gerar_relatorios).grid(row=3, column=0, columnspan=2, pady=10)
+        tb.Button(frame_relat, text="Gerar Relatório", command=self.gerar_relatorios).grid(row=4, column=0, columnspan=2, pady=10)
 
-        ttk.Button(frame_relat, text="Imprimir", command=self.imprimir_relatorio).grid(row=4, column=0, columnspan=2, pady=10)
+        # Botões de Exportação
+        tb.Button(frame_relat, text="Imprimir", command=self.imprimir_relatorio).grid(row=5, column=0, columnspan=2, pady=10)
+        tb.Button(frame_relat, text="Salvar PDF", command=self.exportar_para_pdf).grid(row=6, column=0, columnspan=2, pady=10)
+        tb.Button(frame_relat, text="Salvar Excel", command=self.exportar_para_excel).grid(row=7, column=0, columnspan=2, pady=10)
 
-        ttk.Button(frame_relat, text="Salvar PDF", command=self.exportar_para_pdf).grid(row=5, column=0, columnspan=2, pady=10)
-
-        ttk.Button(frame_relat, text="Salvar Excel", command=self.exportar_para_excel).grid(row=6, column=0, columnspan=2, pady=10)
-
-        self.root.mainloop()
         
     def gerar_relatorios(self):
         conn = create_connection()
@@ -1100,6 +1286,7 @@ class Relatorios(TreeViewHelper):
         cliente = self.clientes_combobox.get()
         setor = self.setores_combobox.get()
         motivo = self.motivos_combobox.get()
+        mes = self.meses_combobox.get()
         
         try:
             # Limpa os dados existentes na Treeview
@@ -1107,7 +1294,7 @@ class Relatorios(TreeViewHelper):
                 self.tree.delete(item)
 
             # Base da consulta SQL
-            query = "SELECT * FROM bo_records WHERE modulo LIKE ?"
+            query = "SELECT * FROM bo_records WHERE modulo LIKE ? AND D_E_L_E_T_ <> '*' AND status NOT LIKE 'Embarcado'"
             params = [self.ultimo_modulo]
 
             # Adiciona condições dinamicamente com base nos filtros
@@ -1120,6 +1307,9 @@ class Relatorios(TreeViewHelper):
             if motivo != "Todos":
                 query += " AND motivo = ?"
                 params.append(motivo)
+            if mes != "Todos":
+                query += " AND MONTH(emissao_totvs) = ?"
+                params.append(int(mes))
 
             # Executa a consulta
             cursor.execute(query, params)
@@ -1134,8 +1324,11 @@ class Relatorios(TreeViewHelper):
                 setor_responsavel = str(row[8]).strip() if row[8] is not None else ""
                 motivo = str(row[6]).strip() if row[6] is not None else ""
 
-                self.tree.insert("", tk.END, values=(
-                    bo, op, cliente, tipo_ocorrencia, setor_responsavel, motivo))
+                self.tree.insert(
+                    "",
+                    "end",
+                    values=(bo, op, cliente, tipo_ocorrencia, setor_responsavel, motivo)
+                )
                 
         except pyodbc.Error as e:
             messagebox.showerror("Erro", f"Erro ao carregar BOs: {e}")
@@ -1314,7 +1507,7 @@ class Relatorios(TreeViewHelper):
         conn = create_connection()
         cursor = conn.cursor()
 
-        query = ("SELECT COALESCE(loja, 'Não especificado') AS Setor FROM bo_records WHERE loja IS NOT NULL AND loja NOT LIKE '' AND modulo LIKE ? GROUP BY loja")
+        query = ("SELECT COALESCE(loja, 'Não especificado') AS Setor FROM bo_records WHERE loja IS NOT NULL AND loja NOT LIKE '' AND modulo LIKE ? AND D_E_L_E_T_ <> '*' GROUP BY loja")
         cursor.execute(query, (self.ultimo_modulo))
         cliente = ["Todos"] + [row[0] for row in cursor.fetchall()]
 
@@ -1327,7 +1520,7 @@ class Relatorios(TreeViewHelper):
         conn = create_connection()
         cursor = conn.cursor()
 
-        query = ("SELECT COALESCE(setor_responsavel, 'Não especificado') AS Setor FROM bo_records WHERE setor_responsavel IS NOT NULL AND setor_responsavel NOT LIKE '' AND modulo LIKE ? GROUP BY setor_responsavel")
+        query = ("SELECT COALESCE(setor_responsavel, 'Não especificado') AS Setor FROM bo_records WHERE setor_responsavel IS NOT NULL AND setor_responsavel NOT LIKE '' AND modulo LIKE ? AND D_E_L_E_T_ <> '*' GROUP BY setor_responsavel")
         cursor.execute(query, (self.ultimo_modulo))
         setores = ["Todos"] + [row[0] for row in cursor.fetchall()]
 
@@ -1340,7 +1533,7 @@ class Relatorios(TreeViewHelper):
         conn = create_connection()
         cursor = conn.cursor()
 
-        query = ("SELECT COALESCE(motivo, 'Não especificado') AS Setor FROM bo_records WHERE motivo IS NOT NULL AND motivo NOT LIKE '' AND modulo LIKE ? GROUP BY motivo")
+        query = ("SELECT COALESCE(motivo, 'Não especificado') AS Setor FROM bo_records WHERE motivo IS NOT NULL AND motivo NOT LIKE '' AND modulo LIKE ? AND D_E_L_E_T_ <> '*' GROUP BY motivo")
         cursor.execute(query, (self.ultimo_modulo))
         motivos = ["Todos"] + [row[0] for row in cursor.fetchall()]
 
@@ -1383,19 +1576,19 @@ class gerarBO():
         ]
         self.entries = {}
 
-        frame = ttk.Frame(self.root, padding=20)
+        frame = tb.Frame(self.root, padding=20)
         frame.pack(expand=True, fill=tk.BOTH)
 
-        ttk.Label(frame, text="Boletim de Ocorrência", font=("Arial", 10, "bold")).grid(row=0, column=0, columnspan=2, pady=(0, 10))
+        tb.Label(frame, text="Boletim de Ocorrência", font=("Arial", 10, "bold")).grid(row=0, column=0, columnspan=2, pady=(0, 10))
         for i, (campo, label) in enumerate(campos):
-            ttk.Label(frame, text=label + ":").grid(row=i+1, column=0, sticky=tk.W, pady=5)
-            entry = ttk.Entry(frame, width=30, show="*" if campo == "password" else "")
+            tb.Label(frame, text=label + ":").grid(row=i+1, column=0, sticky=tk.W, pady=5)
+            entry = tb.Entry(frame, width=30, show="*" if campo == "password" else "")
             entry.grid(row=i+1, column=1, pady=5)
             self.entries[campo] = entry
 
         # row_btn = len(campos) + 2
-        # ttk.Button(frame, text="Salvar", command=self.salvar).grid(row=row_btn, column=0, pady=15, sticky="ew")
-        # ttk.Button(frame, text="Cancelar", command=self.cancelar).grid(row=row_btn, column=1, pady=15, sticky="ew")
+        # tb.Button(frame, text="Salvar", command=self.salvar).grid(row=row_btn, column=0, pady=15, sticky="ew")
+        # tb.Button(frame, text="Cancelar", command=self.cancelar).grid(row=row_btn, column=1, pady=15, sticky="ew")
 
         self.root.update_idletasks()
         largura = self.root.winfo_reqwidth()
@@ -1410,7 +1603,8 @@ class gerarBO():
         return f"Tela de Gerar BO chamada pelo módulo: {self.ultimo_modulo}"
 
 class buscarBo(TreeViewHelper):
-    def __init__(self, parent, caller_id=None):
+    def __init__(self, parent, caller_id=None, user=None):
+        self.user = user
         self.parent = parent
         self.root = tk.Toplevel(parent)
         self.root.title("Buscar BO")
@@ -1423,10 +1617,10 @@ class buscarBo(TreeViewHelper):
         self.ultimo_modulo = caller_id
 
         # Cabeçalho
-        header = ttk.Frame(self.root)
+        header = tb.Frame(self.root)
         header.pack(fill=tk.X, padx=10, pady=10)
 
-        ttk.Button(header, text="Fechar",
+        tb.Button(header, text="Fechar",
                    command=lambda: self.root.destroy()).pack(side=tk.RIGHT)
 
         # Barra de pesquisa
@@ -1434,11 +1628,11 @@ class buscarBo(TreeViewHelper):
             self.root, self.pesquisar_bo, self.clear_search)
 
         # Frame para Treeview e barra de rolagem
-        tree_frame = ttk.Frame(self.root)
+        tree_frame = tb.Frame(self.root)
         tree_frame.pack(expand=True, fill=tk.BOTH, padx=10, pady=(0, 10))
 
         # lista de BOs Treeview
-        self.tree = ttk.Treeview(
+        self.tree = tb.Treeview(
             tree_frame,
             columns=("C5_PEDREPR", "C5_NUM", "C5_NOME",
                      "C5_FILIAL", "C5_EMISSAO", "C5_ENTREGA"),
@@ -1452,7 +1646,7 @@ class buscarBo(TreeViewHelper):
         self.tree.heading("C5_ENTREGA", text="PREVISÃO DE ENTREGA")
 
         # Barra de rolagem vertical
-        v_scrollbar = ttk.Scrollbar(
+        v_scrollbar = tb.Scrollbar(
             tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
         v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
@@ -1460,7 +1654,7 @@ class buscarBo(TreeViewHelper):
         self.tree.pack(expand=True, fill=tk.BOTH, side=tk.LEFT)
 
         self.tree.bind("<Double-1>", lambda event: exibir_detalhes(self.root,
-                       self.tree, caller_id=self.ultimo_modulo))
+                       self.tree, caller_id=self.ultimo_modulo, user=self.user))
 
         center_window(self)
         self.carregar_bos()
@@ -1584,13 +1778,13 @@ class buscarBo(TreeViewHelper):
 class exibir_detalhes():
     instance = None
 
-    def __init__(self, parent, tree, caller_id=None):
+    def __init__(self, parent, tree, caller_id=None, user=None):
+        self.user = user
         self.root = tk.Toplevel(parent)
         self.root.title("Detalhes BO")
         self.root.iconbitmap(resource_path('SAREM.ico'))
         self.root.minsize(400, 300)
         self.root.resizable(False, False)
-        self.root.grab_set()
         self.root.focus_set()
 
         self.root.transient(parent)
@@ -1606,9 +1800,9 @@ class exibir_detalhes():
 
         # Se já está sendo acompanhada, exibe aviso no topo
         if self.bo_ja_acompanhada:
-            aviso_frame = ttk.Frame(self.root)
+            aviso_frame = tb.Frame(self.root)
             aviso_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 0))
-            aviso_label = ttk.Label(
+            aviso_label = tb.Label(
                 aviso_frame,
                 text="⚠️ Esta BO já está sendo acompanhada!",
                 foreground="red",
@@ -1640,7 +1834,7 @@ class exibir_detalhes():
             return False
         try:
             cursor = conn.cursor()
-            cursor.execute("SELECT 1 FROM bo_records WHERE bo_number = ?", (bo_number,))
+            cursor.execute("SELECT 1 FROM bo_records WHERE bo_number = ? AND D_E_L_E_T_ <> '*'", (bo_number,))
             exists = cursor.fetchone()
             return exists is not None
         except Exception:
@@ -1654,7 +1848,7 @@ class exibir_detalhes():
         self.root.grid_rowconfigure(row, weight=3)
         self.root.grid_columnconfigure(0, weight=1)
 
-        frame_sc5Detalhes = ttk.LabelFrame(
+        frame_sc5Detalhes = tb.LabelFrame(
             self.root, text="Detalhes da Ocorrência", padding=10)
         frame_sc5Detalhes.grid(
             row=row, column=0, sticky="nsew", padx=10, pady=10)
@@ -1675,9 +1869,9 @@ class exibir_detalhes():
         labels = ["BO:", "OP:", "CLIENTE:", "FILIAL:",
                   "EMISSÃO:", "PREVISÃO DE ENTREGA:"]
         for i, label_text in enumerate(labels):
-            ttk.Label(frame_sc5Detalhes, text=label_text).grid(
+            tb.Label(frame_sc5Detalhes, text=label_text).grid(
                 row=i, column=0, sticky="w", padx=5, pady=2)
-            ttk.Label(frame_sc5Detalhes, text=valores[i]).grid(
+            tb.Label(frame_sc5Detalhes, text=valores[i]).grid(
                 row=i, column=1, sticky="ew", padx=5, pady=2)
 
         self.root.update_idletasks()
@@ -1687,7 +1881,7 @@ class exibir_detalhes():
         self.root.grid_rowconfigure(row, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
 
-        frame_itensBo = ttk.LabelFrame(
+        frame_itensBo = tb.LabelFrame(
             self.root, text="Itens da BO", padding=10)
         frame_itensBo.grid(row=row, column=0, sticky="nsew", padx=10, pady=10)
 
@@ -1727,13 +1921,13 @@ class exibir_detalhes():
             conn.close()
 
         for i, label_txt in enumerate(labels):
-            label = ttk.Label(frame_itensBo, text=label_txt)
+            label = tb.Label(frame_itensBo, text=label_txt)
             label.grid(row=0, column=i, sticky="w", padx=5, pady=2)
             frame_itensBo.grid_columnconfigure(i, weight=1)
 
         for idx, item in enumerate(itens_bo):
             for col, value in enumerate(item):
-                label = ttk.Label(frame_itensBo, text=value)
+                label = tb.Label(frame_itensBo, text=value)
                 label.grid(row=idx + 1, column=col, sticky="w", padx=5, pady=2)
                 frame_itensBo.grid_columnconfigure(col, weight=1)
 
@@ -1744,32 +1938,33 @@ class exibir_detalhes():
         self.root.grid_rowconfigure(row, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
 
-        frame_opcoesBo = ttk.LabelFrame(
+        frame_opcoesBo = tb.LabelFrame(
             self.root, text="Opções", padding=10)
         frame_opcoesBo.grid(row=row, column=0, sticky="nsew", padx=10, pady=10)
 
         frame_opcoesBo.grid_rowconfigure(0, weight=1)
         frame_opcoesBo.grid_columnconfigure(2, weight=1)
 
-        ttk.Button(frame_opcoesBo, text="Acompanhar BO", command=self.acompanhar_bo).grid(
+        tb.Button(frame_opcoesBo, text="Acompanhar BO", command=self.acompanhar_bo).grid(
             row=0, column=0, sticky="e", padx=5, pady=2)
 
     def acompanhar_bo(self):
         obj = acompanhar_Bo(self.root, self.tree,
-                            caller_id=self.ultimo_modulo)
+                            caller_id=self.ultimo_modulo, user=self.user)
         resultado = obj.identificar_chamador()
         print(resultado)
 
 class exibir_detalhes_acompanhando():
     instance = None
 
-    def __init__(self, parent, tree, caller_id=None):
+    def __init__(self, parent, tree, caller_id=None, user=None):
+        self.parent = parent
+        self.user = user
         self.root = tk.Toplevel(parent)
         self.root.title("Detalhes BO")
         self.root.iconbitmap(resource_path('SAREM.ico'))
         self.root.minsize(400, 300)
         self.root.resizable(False, False)
-        self.root.grab_set()
         self.root.focus_set()
 
         self.root.transient(parent)
@@ -1778,10 +1973,11 @@ class exibir_detalhes_acompanhando():
         self.tree = tree
         self.ultimo_modulo = caller_id
 
-        exibir_detalhes.instance = self
+        exibir_detalhes_acompanhando.instance = self
 
         self.sc5_detalhes()
         self.itens_bo()
+        self.opcoes_bo()
 
         self.root.update_idletasks()
         center_window_child(self.root, parent)
@@ -1791,7 +1987,7 @@ class exibir_detalhes_acompanhando():
         self.root.grid_rowconfigure(0, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
 
-        frame_sc5Detalhes = ttk.LabelFrame(
+        frame_sc5Detalhes = tb.LabelFrame(
             self.root, text="Detalhes da Ocorrência", padding=10)
         frame_sc5Detalhes.grid(
             row=0, column=0, sticky="nsew", padx=10, pady=10)
@@ -1815,7 +2011,7 @@ class exibir_detalhes_acompanhando():
 
         cursor = conn.cursor()
 
-        query = """SELECT bo_number, op, loja, tipo_ocorrencia, motivo, CONVERT(VARCHAR,CONVERT(DATETIME,previsao_embarque),103), descricao, [status]
+        query = """SELECT bo_number, op, loja, tipo_ocorrencia, motivo, CONVERT(VARCHAR,CONVERT(DATETIME,previsao_embarque),103), descricao, frete, [status]
         FROM bo_records
         WHERE bo_number LIKE ?"""
 
@@ -1832,12 +2028,12 @@ class exibir_detalhes_acompanhando():
 
         # Criando as labels
         labels = ["BO:", "OP:", "CLIENTE:", "TIPO DE OCORRÊNCIA:",
-                  "MOTIVO:", "PREVISÃO DE EMBARQUE:", "DESCRIÇÃO:", "STATUS:"]
+                  "MOTIVO:", "PREVISÃO DE EMBARQUE:", "DESCRIÇÃO:", "FRETE", "STATUS:"]
         if itens_bo:
             for i, label_text in enumerate(labels):
-                ttk.Label(frame_sc5Detalhes, text=label_text).grid(
+                tb.Label(frame_sc5Detalhes, text=label_text).grid(
                     row=i, column=0, sticky="w", padx=5, pady=2)
-                ttk.Label(frame_sc5Detalhes, text=itens_bo[0][i]).grid(
+                tb.Label(frame_sc5Detalhes, text=itens_bo[0][i]).grid(
                     row=i, column=1, sticky="ew", padx=5, pady=2)
         else:
             messagebox.showinfo("Aviso", "Nenhum detalhe encontrado para este BO.")
@@ -1850,7 +2046,7 @@ class exibir_detalhes_acompanhando():
         self.root.grid_rowconfigure(0, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
 
-        frame_itensBo = ttk.LabelFrame(
+        frame_itensBo = tb.LabelFrame(
             self.root, text="Itens da BO", padding=10)
         frame_itensBo.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
 
@@ -1890,28 +2086,355 @@ class exibir_detalhes_acompanhando():
             conn.close()
 
         for i, label_txt in enumerate(labels):
-            label = ttk.Label(frame_itensBo, text=label_txt)
+            label = tb.Label(frame_itensBo, text=label_txt)
             label.grid(row=0, column=i, sticky="w", padx=5, pady=2)
             frame_itensBo.grid_columnconfigure(i, weight=1)
 
         for idx, item in enumerate(itens_bo):
             for col, value in enumerate(item):
-                label = ttk.Label(frame_itensBo, text=value)
+                label = tb.Label(frame_itensBo, text=value)
                 label.grid(row=idx + 1, column=col, sticky="w", padx=5, pady=2)
                 frame_itensBo.grid_columnconfigure(col, weight=1)
 
         self.root.update_idletasks()
         self.root.geometry("")
 
-    def acompanhar_bo(self):
-        obj = acompanhar_Bo(self.root, self.tree,
-                            caller_id=self.ultimo_modulo)
-        resultado = obj.identificar_chamador()
-        print(resultado)
+    def opcoes_bo(self, row=2):
+        self.root.grid_rowconfigure(row, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
 
+        frame_opcoesBo = tb.LabelFrame(
+            self.root, text="Opções", padding=10)
+        frame_opcoesBo.grid(row=row, column=0, sticky="nsew", padx=10, pady=10)
+
+        frame_opcoesBo.grid_rowconfigure(0, weight=1)
+        frame_opcoesBo.grid_columnconfigure(2, weight=1)
+
+        tb.Button(frame_opcoesBo, text="Editar BO", command=self.editar_bo).grid(
+            row=0, column=0, sticky="e", padx=5, pady=2)
+        tb.Button(frame_opcoesBo, text="Excluir BO", command=self.excluir_bo).grid(
+            row=0, column=1, sticky="e", padx=5, pady=2)
+
+    def editar_bo(self):
+        self.root.withdraw()
+        editor = editar_Bo(self.parent, self.tree, caller_id=self.ultimo_modulo, user=self.user)
+        self.root.wait_window(editor.root)
+        try:
+            self.root.deiconify()
+        except tk.TclError:
+            pass
+        
+
+    def excluir_bo(self):
+        print(f"Usuário {self.user[1]} solicitou a exclusão da BO.")
+
+        resposta = messagebox.askyesno("Confirmação",
+            "Você tem certeza que deseja excluir esta BO? Esta ação não pode ser desfeita.",
+            icon=messagebox.WARNING
+        )
+
+        item_selecionado = self.tree.selection()
+        if not item_selecionado:
+            messagebox.showwarning("Aviso", "Nenhum item selecionado.")
+            return
+        
+        valores = self.tree.item(item_selecionado, "values")
+        bo_number = valores[0]
+
+        
+        if resposta is True:
+            try:
+                conn = create_connection()
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE bo_records
+                    SET D_E_L_E_T_ = '*', user_delet = ?, deleted_at = GETDATE()
+                    WHERE bo_number = ?
+                """, (self.user[1]), str(bo_number,))
+                conn.commit()
+                messagebox.showinfo("Sucesso", f"{bo_number} excluída com sucesso!")
+                self.root.destroy()
+            except pyodbc.Error as e:
+                messagebox.showerror("Erro", f"Erro ao excluir BO: {e}")
+                self.root.destroy()
+            finally:
+                if conn:
+                    cursor.close()
+                    conn.close()
+
+            if self.ultimo_modulo == "Corporativo":
+                from modulos.corporativo import CorporativoModule
+                if CorporativoModule.instance is not None:
+                    if CorporativoModule.instance is not None:
+                        CorporativoModule.instance.atualizar_bos()
+                    else:
+                        print("Instância do módulo corporativo não encontrada.")
+                else:
+                    pass
+            elif self.ultimo_modulo == "Varejo":
+                from modulos.varejo import VarejoModule
+                if VarejoModule.instance is not None:
+                    if VarejoModule.instance is not None:
+                        VarejoModule.instance.atualizar_bos()
+                    else:
+                        print("Instância do módulo varejo não encontrada.")
+                else:
+                    pass
+            elif self.ultimo_modulo == "Exportacao":
+                from modulos.exportacao import ExportacaoModule
+                if ExportacaoModule.instance is not None:
+                    if ExportacaoModule.instance is not None:
+                        ExportacaoModule.instance.atualizar_bos()
+                    else:
+                        print("Instância do módulo exportacao não encontrada.")
+                else:
+                    pass
+        else:
+            pass
+
+class editar_Bo:
+    def __init__(self, parent, tree, caller_id=None, user=None):
+        self.user = user
+        self.tree = tree
+        self.root = tk.Toplevel(parent)
+        self.root.title("Editar BO")
+        self.root.iconbitmap(resource_path('SAREM.ico'))
+        self.root.minsize(400, 300)
+        self.root.resizable(False, False)
+        self.root.transient(parent)
+        self.root.grab_set()
+        self.root.focus_set()
+
+        self.ultimo_modulo = caller_id
+
+        item_selecionado = tree.selection()
+        if not item_selecionado:
+            messagebox.showwarning("Aviso", "Nenhum item selecionado.")
+            self.root.destroy()
+            return
+
+        valores = tree.item(item_selecionado, "values")
+        self.bo_number = valores[0]
+
+        print(f"Usuário {self.user[1]} solicitou a edição da {self.bo_number} no módulo {self.ultimo_modulo}.")
+
+        self.sc5_detalhes(valores)
+        self.editaveis(parent)
+        self.opcoes_editor()
+
+        self.root.update_idletasks()
+        center_window_child(self.root, parent)
+
+    def sc5_detalhes(self, valores):
+        self.root.grid_rowconfigure(0, weight=3)
+        self.root.grid_rowconfigure(0, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
+
+        frame_sc5Detalhes = tb.LabelFrame(
+            self.root, text="Detalhes da Ocorrência", padding=10)
+        frame_sc5Detalhes.grid(
+            row=0, column=0, sticky="nsew", padx=10, pady=10)
+
+        frame_sc5Detalhes.grid_rowconfigure(0, weight=1)
+        frame_sc5Detalhes.grid_columnconfigure(0, weight=1)
+        frame_sc5Detalhes.grid_columnconfigure(1, weight=2)
+
+        # Obtém o item selecionado no Treeview
+        item_selecionado = self.tree.selection()
+        if not item_selecionado:
+            return
+
+        # Obtém os valores do item selecionado
+        valores = self.tree.item(item_selecionado, "values")
+
+        conn = create_connection()
+        if conn is None:
+            messagebox.showerror("Erro", "Falha ao conectar ao banco de dados")
+            return
+
+        cursor = conn.cursor()
+
+        query = """SELECT bo_number, op, loja, CONVERT(VARCHAR,CONVERT(DATETIME,previsao_embarque),103), [status]
+        FROM bo_records
+        WHERE bo_number LIKE ?"""
+
+        try:
+            cursor.execute(
+                query, (f"%{valores[0]}%",))
+            itens_bo = cursor.fetchall()
+        except pyodbc.Error as e:
+            messagebox.showerror("Erro", f"Erro ao executar a consulta: {e}")
+            return
+        finally:
+            cursor.close()
+            conn.close()
+
+        # Criando as labels
+        labels = ["BO:", "OP:", "CLIENTE:", "PREVISÃO DE EMBARQUE:", "STATUS:"]
+        if itens_bo:
+            for i, label_text in enumerate(labels):
+                tb.Label(frame_sc5Detalhes, text=label_text).grid(
+                    row=i, column=0, sticky="w", padx=5, pady=2)
+                tb.Label(frame_sc5Detalhes, text=itens_bo[0][i]).grid(
+                    row=i, column=1, sticky="ew", padx=5, pady=2)
+        else:
+            messagebox.showinfo("Aviso", "Nenhum detalhe encontrado para este BO.")
+
+        self.root.update_idletasks()
+        self.root.minsize(400, self.root.winfo_height())
+
+    def editaveis(self, parent):
+        self.root.grid_rowconfigure(0, weight=1)
+
+        # Frame para campos editáveis
+        self.entries = {}
+        campos = [
+            ("tipo_ocorrencia", "Tipo de Ocorrência"),
+            ("motivo", "Motivo"),
+            ("descricao", "Descrição"),
+            ("setor_responsavel", "Setor Responsável"),
+            ("frete", "Frete"),
+        ]
+
+        frame_editaveis = tb.LabelFrame(self.root, text="Campos Editáveis", padding=20)
+        frame_editaveis.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
+
+        try:
+            conn = create_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM bo_records WHERE bo_number = ?", (self.bo_number,))
+            self.valores = cursor.fetchone()
+            if self.valores is None:
+                messagebox.showerror("Erro", f"BO {self.bo_number} não encontrada.")
+                self.root.destroy()
+                return
+            cursor.close()
+            conn.close()
+        except pyodbc.Error as e:
+            messagebox.showerror("Erro", f"Erro ao carregar BOs: {e}")
+            self.root.destroy()
+            return
+
+        # Índices dos campos na tupla retornada pelo banco
+        valor_idx = {
+            "tipo_ocorrencia": 5,
+            "motivo": 6,
+            "descricao": 11,
+            "setor_responsavel": 8,
+            "frete": 7
+        }
+
+        for i, (campo, label_text) in enumerate(campos):
+            tb.Label(frame_editaveis, text=label_text + ":").grid(
+                row=i, column=0, sticky=tk.W, pady=5)
+            if campo == "frete":
+                entry = tb.Combobox(frame_editaveis, values=["CIF", "FOB"], state="readonly")
+            elif campo == "motivo":
+                entry = tb.Combobox(frame_editaveis, values=self.obter_motivos(), state="readonly")
+            elif campo == "setor_responsavel":
+                entry = tb.Combobox(frame_editaveis, values=self.obter_setores(), state="readonly")
+            elif campo == "descricao":
+                entry = tk.Text(frame_editaveis, width=30, height=5, font=("Arial", 8))
+            else:
+                entry = tb.Entry(frame_editaveis, width=30)
+            idx = valor_idx.get(campo)
+            if idx is not None and self.valores and len(self.valores) > idx:
+                valor = self.valores[idx]
+                if campo == "frete":
+                    entry.set(valor if valor else "")
+                elif campo == "descricao":
+                    entry.insert("1.0", valor if valor else "")
+                else:
+                    if isinstance(entry, tb.Combobox):
+                        entry.set(valor if valor else "")
+                    elif isinstance(entry, tb.Entry):
+                        entry.insert(0, valor if valor else "")
+            entry.grid(row=i, column=1, pady=5, sticky="ew")
+            self.entries[campo] = entry
+
+    def opcoes_editor(self):
+        self.root.grid_rowconfigure(2, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
+
+        frame_opcoesEditor = tb.LabelFrame(
+            self.root, text="Opções", padding=10)
+        frame_opcoesEditor.grid(row=2, column=0, sticky="nsew", padx=10, pady=10)
+
+        frame_opcoesEditor.grid_rowconfigure(0, weight=1)
+        frame_opcoesEditor.grid_columnconfigure(2, weight=1)
+
+        tb.Button(frame_opcoesEditor, text="Salvar", command=self.salvar).grid(
+            row=0, column=0, sticky="e", padx=5, pady=2)
+        tb.Button(frame_opcoesEditor, text="Cancelar", command=self.cancel).grid(
+            row=0, column=1, sticky="e", padx=5, pady=2)
+
+    def obter_setores(self):
+        conn = create_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT setor_responsavel FROM bo_records WHERE setor_responsavel IS NOT NULL AND setor_responsavel NOT LIKE ''")
+        setores = [row[0] for row in cursor.fetchall()]
+        cursor.close()
+        conn.close()
+        return setores
+
+    def obter_motivos(self):
+        conn = create_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT motivo FROM bo_records WHERE motivo IS NOT NULL AND motivo NOT LIKE ''")
+        motivos = [row[0] for row in cursor.fetchall()]
+        cursor.close()
+        conn.close()
+        return motivos
+
+    def salvar(self):
+        try:
+            conn = create_connection()
+            cursor = conn.cursor()
+            update_query = """
+                UPDATE bo_records
+                SET tipo_ocorrencia = ?, motivo = ?, descricao = ?, setor_responsavel = ?, frete = ?
+                WHERE bo_number = ?
+            """
+            cursor.execute(update_query, (
+                self.entries["tipo_ocorrencia"].get(),
+                self.entries["motivo"].get(),
+                self.entries["descricao"].get("1.0", tk.END).strip(),
+                self.entries["setor_responsavel"].get(),
+                self.entries["frete"].get(),
+                self.bo_number
+            ))
+            conn.commit()
+            messagebox.showinfo("Sucesso", f"BO {self.bo_number} atualizada com sucesso!")
+            self.root.destroy()
+            if exibir_detalhes_acompanhando.instance and exibir_detalhes_acompanhando.instance.root.winfo_exists():
+                exibir_detalhes_acompanhando.instance.root.destroy()
+
+            # Atualiza a lista de BOs no módulo que chamou
+            if self.ultimo_modulo == "Corporativo":
+                from modulos.corporativo import CorporativoModule
+                if CorporativoModule.instance is not None:
+                    CorporativoModule.instance.atualizar_bos()
+            elif self.ultimo_modulo == "Varejo":
+                from modulos.varejo import VarejoModule
+                if VarejoModule.instance is not None:
+                    VarejoModule.instance.atualizar_bos()
+            elif self.ultimo_modulo == "Exportacao":
+                from modulos.exportacao import ExportacaoModule
+                if ExportacaoModule.instance is not None:
+                    ExportacaoModule.instance.atualizar_bos()
+        except pyodbc.Error as e:
+            messagebox.showerror("Erro", f"Erro ao atualizar BO: {e}")
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
+    def cancel(self):
+        self.root.destroy()
 
 class acompanhar_Bo:
-    def __init__(self, parent, tree, caller_id=None):
+    def __init__(self, parent, tree, caller_id=None, user=None):
+        self.user = user
         self.parent = parent
         self.root = tk.Toplevel(parent)
         self.root.title("Acompanhar BO")
@@ -1950,30 +2473,30 @@ class acompanhar_Bo:
 
     def secao_dados_gerais(self):
         """Cria a seção de dados gerais da BO."""
-        frame_dados_gerais = ttk.LabelFrame(
+        frame_dados_gerais = tb.LabelFrame(
             self.root, text="Dados Gerais", padding=10)
         frame_dados_gerais.grid(row=0, column=0, sticky="ew", padx=10, pady=10)
 
         # BO e OP
-        ttk.Label(frame_dados_gerais, text="BO:").grid(
+        tb.Label(frame_dados_gerais, text="BO:").grid(
             row=0, column=0, sticky=tk.W)
-        ttk.Label(frame_dados_gerais, text=self.bo_dados[0]).grid(
+        tb.Label(frame_dados_gerais, text=self.bo_dados[0]).grid(
             row=0, column=1, sticky=tk.W)
-        ttk.Label(frame_dados_gerais, text="OP:").grid(
+        tb.Label(frame_dados_gerais, text="OP:").grid(
             row=1, column=0, sticky=tk.W)
-        ttk.Label(frame_dados_gerais, text=self.bo_dados[1]).grid(
+        tb.Label(frame_dados_gerais, text=self.bo_dados[1]).grid(
             row=1, column=1, sticky=tk.W)
 
         # Cliente
-        ttk.Label(frame_dados_gerais, text="CLIENTE:").grid(
+        tb.Label(frame_dados_gerais, text="CLIENTE:").grid(
             row=2, column=0, sticky=tk.W)
-        ttk.Label(frame_dados_gerais, text=self.bo_dados[2]).grid(
+        tb.Label(frame_dados_gerais, text=self.bo_dados[2]).grid(
             row=2, column=1, sticky=tk.W)
         
         # Data de Emissão
-        ttk.Label(frame_dados_gerais, text="EMISSÃO:").grid(
+        tb.Label(frame_dados_gerais, text="EMISSÃO:").grid(
             row=3, column=0, sticky=tk.W)
-        ttk.Label(frame_dados_gerais, text=self.bo_dados[4]).grid(
+        tb.Label(frame_dados_gerais, text=self.bo_dados[4]).grid(
             row=3, column=1, sticky=tk.W)
         
     def obter_setores(self):
@@ -2002,24 +2525,26 @@ class acompanhar_Bo:
 
     def secao_ocorrencia(self):
         # Cria a seção de detalhes da ocorrência.
-        frame_ocorrencia = ttk.LabelFrame(
+        frame_ocorrencia = tb.LabelFrame(
             self.root, text="Detalhes da Ocorrência", padding=10)
         frame_ocorrencia.grid(row=1, column=0, sticky="ew", padx=10, pady=10)
         
 
         campos_ocorrencia = [
-            ("Tipo de Ocorrência", ttk.Entry),
-            ("Motivo", ttk.Combobox, self.obter_motivos()),
-            ("Descrição", ttk.Entry),
-            ("Setor Responsável", ttk.Combobox, self.obter_setores())
+            ("Tipo de Ocorrência", tb.Entry),
+            ("Motivo", tb.Combobox, self.obter_motivos()),
+            ("Setor Responsável", tb.Combobox, self.obter_setores()),
+            ("Descrição", tk.Text),
         ]
 
         self.entries_ocorrencia = {}
         for i, (campo, widget, *args) in enumerate(campos_ocorrencia):
-            ttk.Label(frame_ocorrencia, text=f"{campo}:").grid(
+            tb.Label(frame_ocorrencia, text=f"{campo}:").grid(
                 row=i, column=0, sticky=tk.W)
-            if widget == ttk.Combobox:
+            if widget == tb.Combobox:
                 entry = widget(frame_ocorrencia, values=args[0])
+            elif widget == tk.Text:
+                entry = widget(frame_ocorrencia, width=30, height=5, font=("Arial", 8))
             else:
                 entry = widget(frame_ocorrencia)
             entry.grid(row=i, column=1, sticky="ew")
@@ -2027,24 +2552,24 @@ class acompanhar_Bo:
 
     def secao_transporte(self):
         """Cria a seção de detalhes do transporte."""
-        frame_transporte = ttk.LabelFrame(
+        frame_transporte = tb.LabelFrame(
             self.root, text="Transporte", padding=10)
         frame_transporte.grid(row=2, column=0, sticky="ew", padx=10, pady=10)
 
-        ttk.Label(frame_transporte, text="Previsão de entrega:").grid(
+        tb.Label(frame_transporte, text="Previsão de entrega:").grid(
             row=0, column=0, sticky=tk.W)
-        ttk.Label(frame_transporte, text=self.bo_dados[5]).grid(
+        tb.Label(frame_transporte, text=self.bo_dados[5]).grid(
             row=0, column=1, sticky=tk.W)
 
         campos_transporte = [
-            ("Frete", ttk.Combobox, ["CIF", "FOB"])
+            ("Frete", tb.Combobox, ["CIF", "FOB"])
         ]
 
         self.entries_transporte = {}
         for i, (campo, widget, *args) in enumerate(campos_transporte, start=1):
-            ttk.Label(frame_transporte, text=f"{campo}:").grid(
+            tb.Label(frame_transporte, text=f"{campo}:").grid(
                 row=i, column=0, sticky=tk.W)
-            if widget == ttk.Combobox:
+            if widget == tb.Combobox:
                 entry = widget(frame_transporte, values=args[0], state="readonly")
             else:
                 entry = widget(frame_transporte)
@@ -2053,14 +2578,14 @@ class acompanhar_Bo:
 
     def secao_anexo(self):
         """Cria a seção de anexos."""
-        frame_anexo = ttk.LabelFrame(
+        frame_anexo = tb.LabelFrame(
             self.root, text="Documentos", padding=10)
         frame_anexo.grid(row=3, column=0, sticky="ew", padx=10, pady=10)
 
-        self.anexo_container = ttk.Frame(frame_anexo)
+        self.anexo_container = tb.Frame(frame_anexo)
         self.anexo_container.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
 
-        self.anexo_button = ttk.Button(
+        self.anexo_button = tb.Button(
             frame_anexo, text="Anexar Arquivos", command=self.anexar_arquivo)
         self.anexo_button.grid(row=1, column=0, sticky="ew", padx=5, pady=5)
 
@@ -2091,7 +2616,7 @@ class acompanhar_Bo:
             widget.destroy()
 
         # Criar um widget para o texto de carregamento
-        self.loading_widget = ttk.Label(
+        self.loading_widget = tb.Label(
             self.anexo_container, text="Carregando anexo...", font=("Arial", 11))
         self.loading_widget.grid(row=0, column=0, padx=5, pady=5)
         print("Texto de carregamento sendo exibido")
@@ -2121,7 +2646,7 @@ class acompanhar_Bo:
                 elif file_path.lower().endswith(('.mp4', '.avi')):
                     self.exibir_video(file_path, i)
         else:
-            label = ttk.Label(self.anexo_container,
+            label = tb.Label(self.anexo_container,
                               text="Nenhum Arquivo Anexado.")
 
             label.pack()
@@ -2131,13 +2656,13 @@ class acompanhar_Bo:
         img.thumbnail((100, 100))
         img = ImageTk.PhotoImage(img)
 
-        label = ttk.Label(self.anexo_container, image=img)
+        label = tb.Label(self.anexo_container, image=img)
         label.image = img
         label.grid(row=index * 2, column=0, padx=5, pady=5)
 
         self.lixeira_icone = ImageTk.PhotoImage(
             Image.open("./images/lixeira.png").resize((20, 20)))
-        remove_button = ttk.Button(self.anexo_container, image=self.lixeira_icone,
+        remove_button = tb.Button(self.anexo_container, image=self.lixeira_icone,
                                    command=lambda img=file_patch: self.remover_imagem(img))
         remove_button.image = self.lixeira_icone
         remove_button.grid(row=index * 2, column=1, padx=5, pady=5)
@@ -2163,21 +2688,21 @@ class acompanhar_Bo:
             img = ImageTk.PhotoImage(img)
 
             # Crie um rótulo para exibir a miniatura
-            label = ttk.Label(self.anexo_container, image=img)
+            label = tb.Label(self.anexo_container, image=img)
             label.image = img
             label.grid(row=index * 2, column=0, padx=5, pady=5)
 
             # Adicione o botão de remoção
             self.lixeira_icone = ImageTk.PhotoImage(
                 Image.open("./images/lixeira.png").resize((20, 20)))
-            remove_button = ttk.Button(self.anexo_container, image=self.lixeira_icone,
+            remove_button = tb.Button(self.anexo_container, image=self.lixeira_icone,
                                        command=lambda img=file_path: self.remover_imagem(img))
             remove_button.image = self.lixeira_icone
             remove_button.grid(row=index * 2, column=1, padx=5, pady=5)
 
         except Exception as e:
             print(f"Erro ao exibir vídeo: {e}")
-            label = ttk.Label(self.anexo_container,
+            label = tb.Label(self.anexo_container,
                               text="Vídeo não pode ser exibido.")
             label.grid(row=index * 2, column=0, padx=5, pady=5)
 
@@ -2187,10 +2712,10 @@ class acompanhar_Bo:
 
     def botao_salvar(self):
         """Cria o botão de salvar."""
-        frame_botoes = ttk.Frame(self.root, padding=10)
+        frame_botoes = tb.Frame(self.root, padding=10)
         frame_botoes.grid(row=4, column=0, sticky="ew", padx=10, pady=10)
 
-        ttk.Button(frame_botoes, text="Salvar",
+        tb.Button(frame_botoes, text="Salvar",
                    command=self.salvar).pack(side=tk.RIGHT)
 
     def motivos(self):
@@ -2237,17 +2762,18 @@ class acompanhar_Bo:
                 # Tipo de Ocorrência
                 self.entries_ocorrencia["Tipo de Ocorrência"].get(),
                 self.entries_ocorrencia["Motivo"].get(),  # Motivo
-                self.entries_ocorrencia["Descrição"].get(),  # Descrição
+                self.entries_ocorrencia["Descrição"].get("1.0", tk.END).strip(),  # Descrição
                 self.entries_ocorrencia["Setor Responsável"].get(),  # Descrição
                 self.entries_transporte["Frete"].get(),  # Frete
                 self.bo_dados[5],  # Previsão de Embarque
                 self.ultimo_modulo,  # Módulo que chamou a função
-                'Em Andamento'  # Status
+                'Em Andamento',  # Status
+                self.user[1]  # Usuário que incluiu
             ]
 
             # Primeiro, verifica se o BO já existe
             cursor.execute(
-                "SELECT 1 FROM bo_records WHERE bo_number = ?", (self.bo_dados[0],))
+                "SELECT 1 FROM bo_records WHERE bo_number = ? AND D_E_L_E_T_ <> '*'", (self.bo_dados[0],))
             exists = cursor.fetchone()
 
             if not exists:
@@ -2255,8 +2781,8 @@ class acompanhar_Bo:
                 cursor.execute('''
                     INSERT INTO bo_records (
                         bo_number, op, loja, filial, emissao_totvs, tipo_ocorrencia, motivo, descricao, setor_responsavel,
-                        frete, previsao_embarque, modulo, status
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        frete, previsao_embarque, modulo, status, user_include
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', valores)
                 conn.commit()
             else:
@@ -2306,9 +2832,3 @@ class acompanhar_Bo:
             if conn:
                 cursor.close()
                 conn.close()
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = exibir_detalhes(root)
-    root.mainloop()
-    ConfigEditor()

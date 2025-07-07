@@ -1,7 +1,8 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+import ttkbootstrap as tb
 import pyodbc
-from telas import *
+from tkinter import messagebox
+from funcoes import *
 from components import *
 from database import create_connection
 
@@ -14,20 +15,22 @@ def resource_path(relative_path):
 class CorporativoModule:
     instance = None # Var de class que armazena a instância atual
 
-    def __init__(self, user):
+    def __init__(self, user, parent):
         self.user = user
-        self.root = tk.Tk()
+        self.root = tk.Toplevel(parent)
         self.root.title("SAREM - Módulo Corporativo")
         self.root.state('zoomed')
 
         self.root.iconbitmap(resource_path('SAREM.ico'))  # Define o ícone da janela
 
+        self.root.protocol("WM_DELETE_WINDOW", parent.destroy)
+
         CorporativoModule.instance = self
 
-        from telas import exibir_detalhes_acompanhando
+        from funcoes import exibir_detalhes_acompanhando
 
         # Lista de BOs
-        self.tree = ttk.Treeview(self.root, columns=(
+        self.tree = tb.Treeview(self.root, columns=(
             "BO", "OP", "Status", "tipo_ocorrencia", "setor_responsavel", "motivo"), show="headings")
         self.tree.heading("BO", text="BO")
         self.tree.heading("OP", text="OP")
@@ -37,7 +40,7 @@ class CorporativoModule:
         self.tree.heading("motivo", text="Motivo")
 
         self.tree.bind("<Double-1>", lambda event: exibir_detalhes_acompanhando(self.root,
-                       self.tree, caller_id="Corporativo"))
+                       self.tree, caller_id="Corporativo", user=self.user))
 
         # Cabeçalho
         self.header = Header(self.root, self.user, caller_id="Corporativo", tree=self.tree)
@@ -69,7 +72,7 @@ class CorporativoModule:
         try:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT bo_number, op, status, tipo_ocorrencia, setor_responsavel, motivo FROM bo_records WHERE modulo LIKE 'corporativo' AND status NOT LIKE 'Embarcado' AND bo_number LIKE ?", (f"%{termo}%",))
+                "SELECT bo_number, op, status, tipo_ocorrencia, setor_responsavel, motivo FROM bo_records WHERE modulo LIKE 'corporativo' AND status NOT LIKE 'Embarcado' AND bo_number LIKE ? AND D_E_L_E_T_ <> '*'", (f"%{termo}%",))
             rows = cursor.fetchall()
 
             self.tree.delete(*self.tree.get_children())

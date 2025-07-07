@@ -35,8 +35,8 @@ dist/
 # Outros arquivos específicos do projeto
 icon.ico
 make_executable.py
+teste.py
 instalador.iss
 msodbcsql.msi
 main.spec
-theme.py
 /installer/
