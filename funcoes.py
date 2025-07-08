@@ -62,7 +62,16 @@ def resource_path(relative_path):
 
 VERSAO_ATUAL = "1.0.2"
 URL_VERSAO = "https://dl.dropboxusercontent.com/scl/fi/dh936k1ph0m2eq5low9gn/versao.txt?rlkey=fnyxw89yee7ai571ue3znbaiv&st=xd9f26ij&dl=0"
-URL_DOWNLOAD = "https://dl.dropboxusercontent.com/scl/fi/lm41ku5uvts7nsa6we01w/Instalador_SAREM.exe?rlkey=2jwgcq2pst9i8xoo5r8l1cxtg&st=yzzgbd9k&dl=0"
+URL_LINK_TXT = "https://dl.dropboxusercontent.com/scl/fi/9hu4p9wo6ydqiit7zfp1b/linknovaversao.txt?rlkey=yubwve92t8qpr2bxd13lsvqij&st=vs0ddwfv&dl=0"
+
+def get_download_url():
+    try:
+        resposta = requests.get(URL_LINK_TXT, timeout=5)
+        if resposta.status_code == 200:
+            return resposta.text.strip()
+    except Exception as e:
+        print("Erro ao obter link do instalador:", e)
+    return None
 
 def verificar_e_att(parent):
     try:
@@ -75,6 +84,11 @@ def verificar_e_att(parent):
                     f"Uma nova versão está disponível.\nDeseja atualizar agora?"
                 )
                 if not resp:
+                    return True
+
+                url_download = get_download_url()
+                if not url_download:
+                    messagebox.showerror("Erro", "Não foi possível obter o link do instalador.")
                     return True
 
                 # Janela de progresso
@@ -93,7 +107,7 @@ def verificar_e_att(parent):
 
                 temp_dir = tempfile.gettempdir()
                 caminho_instalador = os.path.join(temp_dir, "atualizacao.exe")
-                r = requests.get(URL_DOWNLOAD, stream=True)
+                r = requests.get(url_download, stream=True)
                 total = int(r.headers.get('content-length', 0))
                 chunk_size = 8192
                 baixado = 0

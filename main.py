@@ -2,6 +2,8 @@ import tkinter as tk
 import ttkbootstrap as tb
 import os
 import sys
+import atexit
+import psutil
 import tempfile
 from tkinter import messagebox
 from theme import temas
@@ -45,18 +47,32 @@ LOCKFILE = os.path.join(tempfile.gettempdir(), 'sarem_app.lock')
 
 def check_single_instance():
     if os.path.exists(LOCKFILE):
-        messagebox.showerror("SAREM", "O sistema já está aberto!\nFeche a outra janela antes de abrir novamente.")
-        sys.exit(0)
+        try:
+            with open(LOCKFILE, 'r') as f:
+                pid = int(f.read())
+            # Verifica se o processo ainda existe
+            if psutil.pid_exists(pid):
+                from tkinter import messagebox, Tk
+                root = Tk()
+                root.withdraw()
+                messagebox.showerror("SAREM", "O sistema já está aberto!\nFeche a outra janela antes de abrir novamente.")
+                sys.exit(0)
+            else:
+                # Processo não existe mais, remove lockfile órfão
+                os.remove(LOCKFILE)
+        except Exception:
+            os.remove(LOCKFILE)
     with open(LOCKFILE, 'w') as f:
         f.write(str(os.getpid()))
 
 def remove_lockfile():
-    if os.path.exists(LOCKFILE):
-        os.remove(LOCKFILE)
+    try:
+        if os.path.exists(LOCKFILE):
+            os.remove(LOCKFILE)
+    except Exception:
+        pass
 
 check_single_instance()
-
-import atexit
 atexit.register(remove_lockfile)
 
 garantir_config_ini()
