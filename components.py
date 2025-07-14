@@ -3,10 +3,9 @@ import pyodbc
 import ttkbootstrap as tb
 from tkinter import messagebox
 from database import create_connection
+from theme import estilizar_treeview, ajustar_largura_colunas
 
 # Cabeçalho dos módulos
-
-
 class Header:
     def __init__(self, parent, user, caller_id=None, tree=None):
         self.user = user
@@ -24,11 +23,11 @@ class Header:
         # tb.Button(header, text="Gerar Nova BO", command=self.abrir_gerar_bo).pack(side=tk.LEFT)
         tb.Button(header, text="Atualizar", command=lambda: self.carregar_bos()).pack(side=tk.LEFT)
         tb.Button(header, text="Acompanhar uma BO", command=self.abrir_buscar_bo).pack(side=tk.LEFT)
-        tb.Button(header, text="Logoff", command=self.logoff).pack(side=tk.RIGHT)
+        tb.Button(header, text="Logoff", command=self.logoff, style="custom.TButton").pack(side=tk.RIGHT, padx=5)
 
     def abrir_embarcados(self):
         from funcoes import Embarcados
-        janela = Embarcados(self.parent, caller_id=self.ultimo_modulo)
+        janela = Embarcados(self.parent, self.user, caller_id=self.ultimo_modulo)
         self.parent.wait_window(janela.root)
 
     def abrir_estatisticas(self):
@@ -58,7 +57,7 @@ class Header:
 
         try:
             cursor = conn.cursor()
-            query = ("SELECT bo_number, op, status, tipo_ocorrencia, setor_responsavel, motivo FROM bo_records WHERE status NOT LIKE 'Embarcado' AND modulo LIKE ? AND D_E_L_E_T_ <> '*'")
+            query = ("SELECT bo_number, op, status, tipo_ocorrencia, setor_responsavel, loja FROM bo_records WHERE status NOT LIKE 'Embarcado' AND modulo LIKE ? AND D_E_L_E_T_ <> '*'")
             cursor.execute(query, self.ultimo_modulo)
             rows = cursor.fetchall()
 
@@ -74,10 +73,13 @@ class Header:
                 status = str(row[2]).strip("(' ,)") if row[2] is not None else ""
                 tipo_ocorrencia = str(row[3]).strip("(' ,)") if row[3] is not None else ""
                 setor_responsavel = str(row[4]).strip("(' ,)") if row[4] is not None else ""
-                motivo = str(row[5]).strip("(' ,)") if row[5] is not None else ""
+                loja = str(row[5]).strip("(' ,)") if row[5] is not None else ""
 
                 self.tree.insert("", tk.END, values=(
-                    bo, op, status, tipo_ocorrencia, setor_responsavel, motivo))
+                    bo, op, status, tipo_ocorrencia, setor_responsavel, loja))
+                
+                estilizar_treeview(self.tree)
+                ajustar_largura_colunas(self.tree)
         except pyodbc.Error as e:
             messagebox.showerror("Erro", f"Erro ao carregar BOs: {e}")
         finally:
@@ -101,6 +103,29 @@ class Header:
         resultado = obj.identificar_chamador()
         print(resultado)
 
+def on_double_click(self, callback):
+    def wrapper():
+        selected = self.tree.selection()
+        if selected:
+            callback()
+    return wrapper
+        
+def on_click(event, tree):
+    region = tree.identify("region", event.x, event.y)
+    if region != "cell":
+        tree.selection_remove(tree.selection())
+
+class listagemTreeview:
+    def __init__(self, parent, columns, show="headings", on_double_click=None):
+        self.tree = tb.Treeview(parent, columns=columns, show=show)
+        for col in columns:
+            self.tree.heading(col, text=col.upper())
+        self.tree.pack(expand=True, fill=tk.BOTH)
+
+        self.tree.bind("<Button-1>", lambda event: on_click(event, self.tree))
+
+        if on_double_click:
+            self.tree.bind("<Double-1>", lambda event: on_double_click(parent, self.tree))
 
 class SearchBar:
     def __init__(self, parent, search_command, clear_command):
@@ -112,11 +137,11 @@ class SearchBar:
         self.frame.pack(fill=tk.X)
 
         self.search_entry = tb.Entry(self.frame)
-        self.search_entry.pack(side=tk.LEFT, expand=True, fill=tk.X)
+        self.search_entry.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5, pady=5)
 
         self.search_button = tb.Button(
             self.frame, text="Buscar", command=self.search_command)
-        self.search_button.pack(side=tk.LEFT)
+        self.search_button.pack(side=tk.LEFT, padx=5, pady=5)
 
         self.clear_button = tb.Button(
             self.frame, text="Limpar", command=self.clear_command)

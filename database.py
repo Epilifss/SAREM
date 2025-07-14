@@ -92,7 +92,7 @@ def ensure_tables_exist():
                 CREATE TABLE dbo.bo_records (
                     id INT IDENTITY(1,1) PRIMARY KEY,
                     bo_number VARCHAR(20) UNIQUE NOT NULL,
-                    op INT,
+                    op VARCHAR (30) NULL,
                     loja VARCHAR(100),
                     emissao_totvs VARCHAR(50),
                     tipo_ocorrencia VARCHAR(100),
@@ -120,6 +120,18 @@ def ensure_tables_exist():
                     password_hash VARCHAR(256) NOT NULL,
                     module VARCHAR(50),
                     is_admin BIT DEFAULT 0
+                )
+            """)
+
+            cursor.execute("""
+                IF OBJECT_ID('dbo.BO_ITENS', 'U') IS NULL
+                CREATE TABLE [dbo].[BO_ITENS] (
+                    [ID] INT IDENTITY (1, 1) NOT NULL,
+                    [BO_REF] VARCHAR (20)  NULL,
+                    [COD]    VARCHAR (10)  NULL,
+                    [DESC]   VARCHAR (200) NULL,
+                    [LINHA]  VARCHAR (50)  NULL,
+                    [MOTIVO] VARCHAR (200) NULL
                 )
             """)
 

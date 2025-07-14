@@ -45,6 +45,9 @@ from modulos.exportacao import ExportacaoModule
 from database import create_connection_Protheus
 from database import create_connection
 
+# Estilos
+from theme import temas, estilizar_treeview, ajustar_largura_colunas
+
 # Funções
 
 def center_window_screen(win, width=350, height=100):
@@ -60,7 +63,7 @@ def resource_path(relative_path):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.abspath("."), relative_path)
 
-VERSAO_ATUAL = "1.0.2"
+VERSAO_ATUAL = "1.0.3"
 URL_VERSAO = "https://dl.dropboxusercontent.com/scl/fi/dh936k1ph0m2eq5low9gn/versao.txt?rlkey=fnyxw89yee7ai571ue3znbaiv&st=xd9f26ij&dl=0"
 URL_LINK_TXT = "https://dl.dropboxusercontent.com/scl/fi/9hu4p9wo6ydqiit7zfp1b/linknovaversao.txt?rlkey=yubwve92t8qpr2bxd13lsvqij&st=vs0ddwfv&dl=0"
 
@@ -190,7 +193,27 @@ def monitorar_bo_embarcadas():
                     if total_itens > 0 and total_itens == itens_com_nota:
                         cursor.execute("UPDATE bo_records SET status = 'Embarcado' WHERE bo_number = ?", bo_number)
                         conn.commit()
+                        messagebox.showinfo("BO Liberada para Embarque", f"A {bo_number} foi liberada para embarque.")
                         print(f"BO {bo_number} marcada como Embarcada.")
+
+                        try:
+                            from modulos.corporativo import CorporativoModule
+                            if hasattr(CorporativoModule, "instance") and CorporativoModule.instance is not None:
+                                CorporativoModule.instance.atualizar_bos()
+                        except Exception:
+                            pass
+                        try:
+                            from modulos.varejo import VarejoModule
+                            if hasattr(VarejoModule, "instance") and VarejoModule.instance is not None:
+                                VarejoModule.instance.atualizar_bos()
+                        except Exception:
+                            pass
+                        try:
+                            from modulos.exportacao import ExportacaoModule
+                            if hasattr(ExportacaoModule, "instance") and ExportacaoModule.instance is not None:
+                                ExportacaoModule.instance.atualizar_bos()
+                        except Exception:
+                            pass
 
                 cursor.close()
                 conn.close()
@@ -443,10 +466,10 @@ class LoginWindow:
         btn_frame = tb.Frame(campos_frame)
         btn_frame.pack(pady=5, expand=True, anchor="center")
 
-        self.login_btn = tb.Button(btn_frame, text="Login", width=17, command=self.login, style="custom.TButton")
+        self.login_btn = tb.Button(btn_frame, text="Login", width=17, command=self.login)
         self.login_btn.pack(side="left", padx=1)
 
-        self.config_btn = tb.Button(btn_frame, text="Configurar Banco", width=17, command=self.abrir_config, style="custom.TButton")
+        self.config_btn = tb.Button(btn_frame, text="Configurar Banco", width=17, command=self.abrir_config)
         self.config_btn.pack(side="right", padx=1)
 
         center_window(self)
@@ -950,8 +973,9 @@ if __name__ == "__main__":
 
 
 class Embarcados(TreeViewHelper):
-    def __init__(self, parent, caller_id=None):
+    def __init__(self, parent, user, caller_id=None):
         self.parent = parent
+        self.user = user
         self.root = tk.Toplevel(parent)
         self.root.title("Embarcados")
         self.root.iconbitmap(resource_path('SAREM.ico'))
@@ -985,8 +1009,8 @@ class Embarcados(TreeViewHelper):
 
         self.tree.pack(expand=True, fill=tk.BOTH)
 
-        self.tree.bind("<Double-1>", lambda event: exibir_detalhes_acompanhando(self.root,
-                       self.tree, caller_id="Corporativo"))
+        self.tree.bind("<Double-1>", lambda event: exibir_detalhes_embarcado(self.root,
+                       self.tree, caller_id="Embarcados"))
 
         self.carregar_bos()
 
@@ -1621,7 +1645,7 @@ class buscarBo(TreeViewHelper):
         self.user = user
         self.parent = parent
         self.root = tk.Toplevel(parent)
-        self.root.title("Buscar BO")
+        self.root.title("Acompanhar uma BO")
         self.root.iconbitmap(resource_path('SAREM.ico'))
         self.root.geometry("1000x600")
         self.root.state('zoomed')
@@ -1629,6 +1653,8 @@ class buscarBo(TreeViewHelper):
         self.root.transient(parent)
 
         self.ultimo_modulo = caller_id
+
+        from theme import ajustar_largura_colunas
 
         # Cabeçalho
         header = tb.Frame(self.root)
@@ -1722,7 +1748,7 @@ class buscarBo(TreeViewHelper):
             if conn:
                 cursor.close()
                 conn.close()
-        self.ajustar_colunas()
+        ajustar_largura_colunas(self.tree)
 
     def pesquisar_bo(self, event=None):
         termo = self.search_bar.search_entry.get()
@@ -2025,7 +2051,7 @@ class exibir_detalhes_acompanhando():
 
         cursor = conn.cursor()
 
-        query = """SELECT bo_number, op, loja, tipo_ocorrencia, motivo, CONVERT(VARCHAR,CONVERT(DATETIME,previsao_embarque),103), descricao, frete, [status]
+        query = """SELECT bo_number, op, loja, tipo_ocorrencia, CONVERT(VARCHAR,CONVERT(DATETIME,previsao_embarque),103), descricao, frete, [status]
         FROM bo_records
         WHERE bo_number LIKE ?"""
 
@@ -2041,8 +2067,7 @@ class exibir_detalhes_acompanhando():
             conn.close()
 
         # Criando as labels
-        labels = ["BO:", "OP:", "CLIENTE:", "TIPO DE OCORRÊNCIA:",
-                  "MOTIVO:", "PREVISÃO DE EMBARQUE:", "DESCRIÇÃO:", "FRETE", "STATUS:"]
+        labels = ["BO:", "OP:", "CLIENTE:", "TIPO DE OCORRÊNCIA:", "PREVISÃO DE EMBARQUE:", "DESCRIÇÃO:", "FRETE:", "STATUS:"]
         if itens_bo:
             for i, label_text in enumerate(labels):
                 tb.Label(frame_sc5Detalhes, text=label_text).grid(
@@ -2068,7 +2093,7 @@ class exibir_detalhes_acompanhando():
         for i in range(3):
             frame_itensBo.grid_columnconfigure(i, weight=1)
 
-        labels = ["CÓDIGO", "DESCRIÇÃO", "LINHA"]
+        labels = ["CÓDIGO", "DESCRIÇÃO", "LINHA", "MOTIVO"]
 
         item_selecionado2 = self.tree.selection()
         if not item_selecionado2:
@@ -2076,21 +2101,21 @@ class exibir_detalhes_acompanhando():
 
         valores2 = self.tree.item(item_selecionado2, "values")
 
-        conn = create_connection_Protheus()
+        conn = create_connection()
         if conn is None:
             messagebox.showerror("Erro", "Falha ao conectar ao banco de dados")
             return
 
         cursor = conn.cursor()
 
-        query = """SELECT SC6.C6_CODTIDI, SC6.C6_DESCRI, SC6.C6_LINHA
-        FROM SC6010 SC6
-        INNER JOIN SC5010 SC5 ON (SC5.C5_NUM = SC6.C6_NUM AND SC5.C5_FILIAL = SC6.C6_FILIAL AND SC5.D_E_L_E_T_ <> '*')
-        WHERE SC6.C6_NUM LIKE ? AND SC5.C5_PEDREPR LIKE ? AND SC5.C5_PEDREPR LIKE ?"""
+        query = """SELECT COD, [DESC], LINHA, BI.MOTIVO
+        FROM BO_ITENS as BI
+        INNER JOIN bo_records AS BR ON BR.bo_number = BI.BO_REF
+        WHERE BR.bo_number LIKE ? AND BR.op LIKE ? AND BR.D_E_L_E_T_ <> '*'"""
 
         try:
             cursor.execute(
-                query, (f"%{valores2[1]}%", "%BO%", f"%{valores2[0]}%"))
+                query, (f"%{valores2[0]}%", f"%{valores2[1]}%"))
             itens_bo = cursor.fetchall()
         except pyodbc.Error as e:
             messagebox.showerror("Erro", f"Erro ao executar a consulta: {e}")
@@ -2206,21 +2231,182 @@ class exibir_detalhes_acompanhando():
         else:
             pass
 
+class exibir_detalhes_embarcado():
+    instance = None
+
+    def __init__(self, parent, tree, caller_id=None, user=None):
+        self.parent = parent
+        self.user = user
+        self.root = tk.Toplevel(parent)
+        self.root.title("Detalhes BO")
+        self.root.iconbitmap(resource_path('SAREM.ico'))
+        self.root.minsize(400, 300)
+        self.root.resizable(False, False)
+        self.root.focus_set()
+
+        self.root.transient(parent)
+        self.root.grab_set()
+
+        self.tree = tree
+        self.ultimo_modulo = caller_id
+
+        exibir_detalhes_acompanhando.instance = self
+
+        self.sc5_detalhes()
+        self.itens_bo()
+
+        self.root.update_idletasks()
+        center_window_child(self.root, parent)
+
+    def sc5_detalhes(self):
+        self.root.grid_rowconfigure(0, weight=3)
+        self.root.grid_rowconfigure(0, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
+
+        frame_sc5Detalhes = tb.LabelFrame(
+            self.root, text="Detalhes da Ocorrência", padding=10)
+        frame_sc5Detalhes.grid(
+            row=0, column=0, sticky="nsew", padx=10, pady=10)
+
+        frame_sc5Detalhes.grid_rowconfigure(0, weight=1)
+        frame_sc5Detalhes.grid_columnconfigure(0, weight=1)
+        frame_sc5Detalhes.grid_columnconfigure(1, weight=2)
+
+        # Obtém o item selecionado no Treeview
+        item_selecionado = self.tree.selection()
+        if not item_selecionado:
+            return
+
+        # Obtém os valores do item selecionado
+        valores = self.tree.item(item_selecionado, "values")
+
+        conn = create_connection()
+        if conn is None:
+            messagebox.showerror("Erro", "Falha ao conectar ao banco de dados")
+            return
+
+        cursor = conn.cursor()
+
+        query = """SELECT bo_number, op, loja, tipo_ocorrencia, CONVERT(VARCHAR,CONVERT(DATETIME,previsao_embarque),103), descricao, frete, [status]
+        FROM bo_records
+        WHERE bo_number LIKE ?"""
+
+        try:
+            cursor.execute(
+                query, (f"%{valores[0]}%"))
+            itens_bo = cursor.fetchall()
+        except pyodbc.Error as e:
+            messagebox.showerror("Erro", f"Erro ao executar a consulta: {e}")
+            return
+        finally:
+            cursor.close()
+            conn.close()
+
+        # Criando as labels
+        labels = ["BO:", "OP:", "CLIENTE:", "TIPO DE OCORRÊNCIA:", "PREVISÃO DE EMBARQUE:", "DESCRIÇÃO:", "FRETE:", "STATUS:"]
+        if itens_bo:
+            for i, label_text in enumerate(labels):
+                tb.Label(frame_sc5Detalhes, text=label_text).grid(
+                    row=i, column=0, sticky="w", padx=5, pady=2)
+                tb.Label(frame_sc5Detalhes, text=itens_bo[0][i]).grid(
+                    row=i, column=1, sticky="ew", padx=5, pady=2)
+        else:
+            messagebox.showinfo("Aviso", "Nenhum detalhe encontrado para este BO.")
+
+        self.root.update_idletasks()
+        self.root.minsize(400, self.root.winfo_height())
+
+    def itens_bo(self):
+        self.root.grid_rowconfigure(0, weight=3)
+        self.root.grid_rowconfigure(0, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
+
+        frame_itensBo = tb.LabelFrame(
+            self.root, text="Itens da BO", padding=10)
+        frame_itensBo.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
+
+        frame_itensBo.grid_rowconfigure(0, weight=1)
+        for i in range(3):
+            frame_itensBo.grid_columnconfigure(i, weight=1)
+
+        labels = ["CÓDIGO", "DESCRIÇÃO", "LINHA", "MOTIVO"]
+
+        item_selecionado2 = self.tree.selection()
+        if not item_selecionado2:
+            return
+
+        valores2 = self.tree.item(item_selecionado2, "values")
+
+        conn = create_connection()
+        if conn is None:
+            messagebox.showerror("Erro", "Falha ao conectar ao banco de dados")
+            return
+
+        cursor = conn.cursor()
+
+        query = """SELECT COD, [DESC], LINHA, BI.MOTIVO
+        FROM BO_ITENS as BI
+        INNER JOIN bo_records AS BR ON BR.bo_number = BI.BO_REF
+        WHERE BR.bo_number LIKE ? AND BR.op LIKE ? AND BR.D_E_L_E_T_ <> '*'"""
+
+        try:
+            cursor.execute(
+                query, (f"%{valores2[0]}%", f"%{valores2[1]}%"))
+            itens_bo = cursor.fetchall()
+        except pyodbc.Error as e:
+            messagebox.showerror("Erro", f"Erro ao executar a consulta: {e}")
+            return
+        finally:
+            cursor.close()
+            conn.close()
+
+        for i, label_txt in enumerate(labels):
+            label = tb.Label(frame_itensBo, text=label_txt)
+            label.grid(row=0, column=i, sticky="w", padx=5, pady=2)
+            frame_itensBo.grid_columnconfigure(i, weight=1)
+
+        for idx, item in enumerate(itens_bo):
+            for col, value in enumerate(item):
+                label = tb.Label(frame_itensBo, text=value)
+                label.grid(row=idx + 1, column=col, sticky="w", padx=5, pady=2)
+                frame_itensBo.grid_columnconfigure(col, weight=1)
+
+        self.root.update_idletasks()
+        self.root.geometry("")
+
+
 class editar_Bo:
     def __init__(self, parent, tree, caller_id=None, user=None):
         self.user = user
         self.tree = tree
+        self.ultimo_modulo = caller_id
+
+        # ---------- JANELA ----------
         self.root = tk.Toplevel(parent)
         self.root.title("Editar BO")
         self.root.iconbitmap(resource_path('SAREM.ico'))
-        self.root.minsize(400, 300)
-        self.root.resizable(False, False)
+        # self.root.minsize(420, 300)
         self.root.transient(parent)
         self.root.grab_set()
         self.root.focus_set()
 
-        self.ultimo_modulo = caller_id
+        # ---------- SCROLL GLOBAL (parte SUPERIOR que expande) ----------
+        canvas = tk.Canvas(self.root)
+        v_scroll = tb.Scrollbar(self.root, orient="vertical", command=canvas.yview)
+        v_scroll.pack(side="right", fill="y")
 
+        # 1) pack canvas no topo (expande)
+        canvas.pack(side="top", fill="both", expand=True)
+        canvas.configure(yscrollcommand=v_scroll.set)
+
+        scrollable_frame = tb.Frame(canvas)
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+
+        # ---------- CONTEÚDO ROLÁVEL ----------
         item_selecionado = tree.selection()
         if not item_selecionado:
             messagebox.showwarning("Aviso", "Nenhum item selecionado.")
@@ -2230,22 +2416,36 @@ class editar_Bo:
         valores = tree.item(item_selecionado, "values")
         self.bo_number = valores[0]
 
-        print(f"Usuário {self.user[1]} solicitou a edição da {self.bo_number} no módulo {self.ultimo_modulo}.")
+        self.sc5_detalhes(valores, scrollable_frame)
+        self.editaveis(parent, scrollable_frame)
+        self.itens_bo(scrollable_frame)
 
-        self.sc5_detalhes(valores)
-        self.editaveis(parent)
-        self.opcoes_editor()
+        # ---------- SCROLL COM A RODA DO MOUSE ----------
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)   # Windows / macOS
+
+        # ---------- FRAME DE OPÇÕES FIXO EM BAIXO ----------
+        self.opcoes_editor(self.root)          # empacota no root
+
+        # ---------- AJUSTE DE TAMANHO ----------
+        self.root.update_idletasks()
+        ideal_width = scrollable_frame.winfo_reqwidth() + v_scroll.winfo_width() + 40
+        self.root.geometry(f"{ideal_width}x600")
+        center_window_child(self.root, parent)
+
+        # centraliza
         self.root.update_idletasks()
         center_window_child(self.root, parent)
 
-    def sc5_detalhes(self, valores):
-        self.root.grid_rowconfigure(0, weight=3)
-        self.root.grid_rowconfigure(0, weight=1)
-        self.root.grid_columnconfigure(0, weight=1)
+    def sc5_detalhes(self, valores, parent_frame):
+        parent_frame.grid_rowconfigure(0, weight=3)
+        parent_frame.grid_rowconfigure(0, weight=1)
+        parent_frame.grid_columnconfigure(0, weight=1)
 
         frame_sc5Detalhes = tb.LabelFrame(
-            self.root, text="Detalhes da Ocorrência", padding=10)
+            parent_frame, text="Detalhes da Ocorrência", padding=10)
         frame_sc5Detalhes.grid(
             row=0, column=0, sticky="nsew", padx=10, pady=10)
 
@@ -2297,20 +2497,19 @@ class editar_Bo:
         self.root.update_idletasks()
         self.root.minsize(400, self.root.winfo_height())
 
-    def editaveis(self, parent):
-        self.root.grid_rowconfigure(0, weight=1)
+    def editaveis(self, parent, parent_frame):
+        parent_frame.grid_rowconfigure(0, weight=1)
 
         # Frame para campos editáveis
         self.entries = {}
         campos = [
             ("tipo_ocorrencia", "Tipo de Ocorrência"),
-            ("motivo", "Motivo"),
             ("descricao", "Descrição"),
             ("setor_responsavel", "Setor Responsável"),
             ("frete", "Frete"),
         ]
 
-        frame_editaveis = tb.LabelFrame(self.root, text="Campos Editáveis", padding=20)
+        frame_editaveis = tb.LabelFrame(parent_frame, text="Campos Editáveis", padding=20)
         frame_editaveis.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
 
         try:
@@ -2343,8 +2542,6 @@ class editar_Bo:
                 row=i, column=0, sticky=tk.W, pady=5)
             if campo == "frete":
                 entry = tb.Combobox(frame_editaveis, values=["CIF", "FOB"], state="readonly")
-            elif campo == "motivo":
-                entry = tb.Combobox(frame_editaveis, values=self.obter_motivos(), state="readonly")
             elif campo == "setor_responsavel":
                 entry = tb.Combobox(frame_editaveis, values=self.obter_setores(), state="readonly")
             elif campo == "descricao":
@@ -2366,21 +2563,76 @@ class editar_Bo:
             entry.grid(row=i, column=1, pady=5, sticky="ew")
             self.entries[campo] = entry
 
-    def opcoes_editor(self):
-        self.root.grid_rowconfigure(2, weight=1)
-        self.root.grid_columnconfigure(0, weight=1)
+    def itens_bo(self, parent_frame):
+        parent_frame.grid_rowconfigure(0, weight=3)
+        parent_frame.grid_rowconfigure(0, weight=1)
+        parent_frame.grid_columnconfigure(0, weight=1)
 
-        frame_opcoesEditor = tb.LabelFrame(
-            self.root, text="Opções", padding=10)
-        frame_opcoesEditor.grid(row=2, column=0, sticky="nsew", padx=10, pady=10)
+        frame_itensBo = tb.LabelFrame(
+            parent_frame, text="Itens da BO", padding=10)
+        frame_itensBo.grid(row=2, column=0, sticky="nsew", padx=10, pady=10)
 
-        frame_opcoesEditor.grid_rowconfigure(0, weight=1)
-        frame_opcoesEditor.grid_columnconfigure(2, weight=1)
+        frame_itensBo.grid_rowconfigure(0, weight=1)
+        for i in range(3):
+            frame_itensBo.grid_columnconfigure(i, weight=1)
 
-        tb.Button(frame_opcoesEditor, text="Salvar", command=self.salvar).grid(
-            row=0, column=0, sticky="e", padx=5, pady=2)
-        tb.Button(frame_opcoesEditor, text="Cancelar", command=self.cancel).grid(
-            row=0, column=1, sticky="e", padx=5, pady=2)
+        labels = ["CÓDIGO", "DESCRIÇÃO", "LINHA", "MOTIVO"]
+
+        item_selecionado2 = self.tree.selection()
+        if not item_selecionado2:
+            return
+
+        valores2 = self.tree.item(item_selecionado2, "values")
+
+        conn = create_connection()
+        if conn is None:
+            messagebox.showerror("Erro", "Falha ao conectar ao banco de dados")
+            return
+
+        cursor = conn.cursor()
+
+        query = """SELECT COD, [DESC], LINHA, BI.MOTIVO
+        FROM BO_ITENS as BI
+        INNER JOIN bo_records AS BR ON BR.bo_number = BI.BO_REF
+        WHERE BR.bo_number = ? AND BR.op = ? AND BR.D_E_L_E_T_ <> '*'"""
+
+        try:
+            cursor.execute(
+                query, (f"{valores2[0]}", f"{valores2[1]}"))
+            self.itens_bo = cursor.fetchall()
+        except pyodbc.Error as e:
+            messagebox.showerror("Erro", f"Erro ao executar a consulta: {e}")
+            self.itens_bo = []
+        finally:
+            cursor.close()
+            conn.close()
+
+        # Cabeçalho
+        for i, label_txt in enumerate(labels):
+            label = tb.Label(frame_itensBo, text=label_txt)
+            label.grid(row=0, column=i, sticky="w", padx=5, pady=2)
+            frame_itensBo.grid_columnconfigure(i, weight=1)
+
+        # Para guardar os widgets de motivo
+        self.entries_motivo_itens = []
+
+        # Linhas dos itens
+        motivos_opcoes = self.obter_motivos()
+        for idx, (cod, desc, linha, motivo) in enumerate(self.itens_bo):
+            tb.Label(frame_itensBo, text=cod).grid(row=idx+1, column=0, padx=5, pady=2)
+            tb.Label(frame_itensBo, text=desc).grid(row=idx+1, column=1, padx=5, pady=2)
+            tb.Label(frame_itensBo, text=linha).grid(row=idx+1, column=2, padx=5, pady=2)
+            entry_motivo = tb.Combobox(frame_itensBo, values=motivos_opcoes, width=25)
+            entry_motivo.set(motivo if motivo else "")
+            entry_motivo.grid(row=idx+1, column=3, padx=5, pady=2)
+            self.entries_motivo_itens.append((cod, entry_motivo))
+
+    def opcoes_editor(self, parent):
+        frame = tb.LabelFrame(parent, text="Opções", padding=10)
+        frame.pack(side="bottom", fill="x", padx=10, pady=10)
+
+        tb.Button(frame, text="Salvar", command=self.salvar).pack(side="left", padx=5)
+        tb.Button(frame, text="Cancelar", command=self.cancel).pack(side="left", padx=5)
 
     def obter_setores(self):
         conn = create_connection()
@@ -2394,7 +2646,7 @@ class editar_Bo:
     def obter_motivos(self):
         conn = create_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT DISTINCT motivo FROM bo_records WHERE motivo IS NOT NULL AND motivo NOT LIKE ''")
+        cursor.execute("SELECT DISTINCT MOTIVO FROM BO_ITENS WHERE MOTIVO IS NOT NULL AND MOTIVO NOT LIKE ''")
         motivos = [row[0] for row in cursor.fetchall()]
         cursor.close()
         conn.close()
@@ -2403,20 +2655,37 @@ class editar_Bo:
     def salvar(self):
         try:
             conn = create_connection()
+
             cursor = conn.cursor()
+
             update_query = """
                 UPDATE bo_records
-                SET tipo_ocorrencia = ?, motivo = ?, descricao = ?, setor_responsavel = ?, frete = ?
+                SET tipo_ocorrencia = ?,
+                    descricao = ?,
+                    setor_responsavel = ?,
+                    frete = ?
                 WHERE bo_number = ?
             """
+            
             cursor.execute(update_query, (
                 self.entries["tipo_ocorrencia"].get(),
-                self.entries["motivo"].get(),
                 self.entries["descricao"].get("1.0", tk.END).strip(),
                 self.entries["setor_responsavel"].get(),
                 self.entries["frete"].get(),
                 self.bo_number
             ))
+
+            dados_itens = [
+                (entry.get(), self.bo_number, cod)
+                for cod, entry in self.entries_motivo_itens
+            ]
+
+            cursor.executemany("""
+                UPDATE BO_ITENS
+                SET MOTIVO = ?
+                WHERE BO_REF = ? AND COD = ?
+            """, dados_itens)
+
             conn.commit()
             messagebox.showinfo("Sucesso", f"BO {self.bo_number} atualizada com sucesso!")
             self.root.destroy()
@@ -2450,394 +2719,246 @@ class acompanhar_Bo:
     def __init__(self, parent, tree, caller_id=None, user=None):
         self.user = user
         self.parent = parent
-        self.root = tk.Toplevel(parent)
-        self.root.title("Acompanhar BO")
-        self.root.iconbitmap(resource_path('SAREM.ico'))
-        
-        self.root.transient(parent)
-        center_window_child(self.root, parent)
-        self.root.grab_set()
-        self.root.focus_set()
-
-        self.tree = tree
         self.ultimo_modulo = caller_id
+        self.tree = tree
         self.anexos = []
         self.loading_label = None
         self.max_anexos = 5
         self.max_tamanho_anexo = 50 * 1024 * 1024
 
+        # ---------- JANELA ----------
+        self.root = tk.Toplevel(parent)
+        self.root.title("Acompanhar BO")
+        self.root.iconbitmap(resource_path('SAREM.ico'))
+        self.root.transient(parent)
+        self.root.grab_set()
+        self.root.focus_set()
+
+        # ---------- SCROLL GLOBAL ----------
+        canvas = tk.Canvas(self.root)
+        v_scroll = tb.Scrollbar(self.root, orient="vertical", command=canvas.yview)
+        v_scroll.pack(side="right", fill="y")
+        canvas.pack(side="top", fill="both", expand=True)
+        canvas.configure(yscrollcommand=v_scroll.set)
+
+        scrollable_frame = tb.Frame(canvas)
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+
+        # ---------- CONTEÚDO ROLÁVEL ----------
         self.bo_dados = self.obter_dados_bo()
-        self.secao_dados_gerais()
-        self.secao_ocorrencia()
-        self.secao_transporte()
-        # self.secao_anexo()
-        self.botao_salvar()
+        self.secao_dados_gerais(scrollable_frame)
+        self.secao_ocorrencia(scrollable_frame)
+        self.secao_transporte(scrollable_frame)
+        self.secao_itens(scrollable_frame)
 
-        self.ajustar_tamanho_janela()
+        # ---------- SCROLL COM A RODA ----------
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
-    def ajustar_tamanho_janela(self):
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        # ---------- FRAME DE BOTÕES FIXO ----------
+        self.botao_salvar(self.root)   # empacota no root, fora do scroll
+
+        # ---------- AJUSTE DE TAMANHO ----------
         self.root.update_idletasks()
+        ideal_width = scrollable_frame.winfo_reqwidth() + v_scroll.winfo_width() + 40
+        self.root.geometry(f"{ideal_width}x600")
+        center_window_child(self.root, parent)
 
-        largura = self.root.winfo_reqwidth()
-        altura = self.root.winfo_reqheight()
+        # centraliza
+        self.root.update_idletasks()
+        center_window_child(self.root, parent)
 
-        self.root.geometry(f"{largura}x{altura}")
+    # ---------- MÉTODOS AUXILIARES ----------
+    def obter_dados_bo(self):
+        selecionado = self.tree.selection()
+        if not selecionado:
+            return None
+        valores = self.tree.item(selecionado, "values")
+        return valores if valores else None
 
-        center_window(self)
+    # ---------- SEÇÕES (todas recebem parent_frame = scrollable_frame) ----------
+    def secao_dados_gerais(self, parent_frame):
+        frame = tb.LabelFrame(parent_frame, text="Dados Gerais", padding=10)
+        frame.pack(fill="x", padx=10, pady=10)
 
-    def secao_dados_gerais(self):
-        """Cria a seção de dados gerais da BO."""
-        frame_dados_gerais = tb.LabelFrame(
-            self.root, text="Dados Gerais", padding=10)
-        frame_dados_gerais.grid(row=0, column=0, sticky="ew", padx=10, pady=10)
+        labels = ["BO:", "OP:", "CLIENTE:", "EMISSÃO:"]
+        for i, texto in enumerate(labels):
+            tb.Label(frame, text=texto).grid(row=i, column=0, sticky="w")
+            tb.Label(frame, text=self.bo_dados[i]).grid(row=i, column=1, sticky="w")
 
-        # BO e OP
-        tb.Label(frame_dados_gerais, text="BO:").grid(
-            row=0, column=0, sticky=tk.W)
-        tb.Label(frame_dados_gerais, text=self.bo_dados[0]).grid(
-            row=0, column=1, sticky=tk.W)
-        tb.Label(frame_dados_gerais, text="OP:").grid(
-            row=1, column=0, sticky=tk.W)
-        tb.Label(frame_dados_gerais, text=self.bo_dados[1]).grid(
-            row=1, column=1, sticky=tk.W)
-
-        # Cliente
-        tb.Label(frame_dados_gerais, text="CLIENTE:").grid(
-            row=2, column=0, sticky=tk.W)
-        tb.Label(frame_dados_gerais, text=self.bo_dados[2]).grid(
-            row=2, column=1, sticky=tk.W)
-        
-        # Data de Emissão
-        tb.Label(frame_dados_gerais, text="EMISSÃO:").grid(
-            row=3, column=0, sticky=tk.W)
-        tb.Label(frame_dados_gerais, text=self.bo_dados[4]).grid(
-            row=3, column=1, sticky=tk.W)
-        
     def obter_setores(self):
         conn = create_connection()
         cursor = conn.cursor()
-    
-        cursor.execute("SELECT DISTINCT setor_responsavel FROM bo_records WHERE setor_responsavel IS NOT NULL")
+        cursor.execute(
+            "SELECT DISTINCT setor_responsavel FROM bo_records "
+            "WHERE setor_responsavel IS NOT NULL AND setor_responsavel NOT LIKE ''"
+        )
         setores = [row[0] for row in cursor.fetchall()]
-
         cursor.close()
         conn.close()
-
         return setores
-        
+
     def obter_motivos(self):
         conn = create_connection()
         cursor = conn.cursor()
-    
-        cursor.execute("SELECT DISTINCT motivo FROM bo_records WHERE motivo IS NOT NULL")
+        cursor.execute(
+            "SELECT DISTINCT MOTIVO FROM BO_ITENS "
+            "WHERE MOTIVO IS NOT NULL AND MOTIVO NOT LIKE ''"
+        )
         motivos = [row[0] for row in cursor.fetchall()]
-
         cursor.close()
         conn.close()
-
         return motivos
 
-    def secao_ocorrencia(self):
-        # Cria a seção de detalhes da ocorrência.
-        frame_ocorrencia = tb.LabelFrame(
-            self.root, text="Detalhes da Ocorrência", padding=10)
-        frame_ocorrencia.grid(row=1, column=0, sticky="ew", padx=10, pady=10)
-        
+    def secao_ocorrencia(self, parent_frame):
+        frame = tb.LabelFrame(parent_frame, text="Detalhes da Ocorrência", padding=10)
+        frame.pack(fill="x", padx=10, pady=10)
 
-        campos_ocorrencia = [
+        campos = [
             ("Tipo de Ocorrência", tb.Entry),
-            ("Motivo", tb.Combobox, self.obter_motivos()),
             ("Setor Responsável", tb.Combobox, self.obter_setores()),
             ("Descrição", tk.Text),
         ]
 
         self.entries_ocorrencia = {}
-        for i, (campo, widget, *args) in enumerate(campos_ocorrencia):
-            tb.Label(frame_ocorrencia, text=f"{campo}:").grid(
-                row=i, column=0, sticky=tk.W)
-            if widget == tb.Combobox:
-                entry = widget(frame_ocorrencia, values=args[0])
-            elif widget == tk.Text:
-                entry = widget(frame_ocorrencia, width=30, height=5, font=("Arial", 8))
+        for i, (label, widget, *args) in enumerate(campos):
+            tb.Label(frame, text=f"{label}:").grid(row=i, column=0, sticky="w")
+            if widget == tk.Text:
+                w = widget(frame, width=30, height=5, font=("Arial", 8))
+            elif widget == tb.Combobox:
+                w = widget(frame, values=args[0])
             else:
-                entry = widget(frame_ocorrencia)
-            entry.grid(row=i, column=1, sticky="ew")
-            self.entries_ocorrencia[campo] = entry
+                w = widget(frame)
+            w.grid(row=i, column=1, sticky="ew")
+            self.entries_ocorrencia[label] = w
 
-    def secao_transporte(self):
-        """Cria a seção de detalhes do transporte."""
-        frame_transporte = tb.LabelFrame(
-            self.root, text="Transporte", padding=10)
-        frame_transporte.grid(row=2, column=0, sticky="ew", padx=10, pady=10)
+    def secao_transporte(self, parent_frame):
+        frame = tb.LabelFrame(parent_frame, text="Transporte", padding=10)
+        frame.pack(fill="x", padx=10, pady=10)
 
-        tb.Label(frame_transporte, text="Previsão de entrega:").grid(
-            row=0, column=0, sticky=tk.W)
-        tb.Label(frame_transporte, text=self.bo_dados[5]).grid(
-            row=0, column=1, sticky=tk.W)
+        tb.Label(frame, text="Previsão de entrega:").grid(row=0, column=0, sticky="w")
+        tb.Label(frame, text=self.bo_dados[5]).grid(row=0, column=1, sticky="w")
 
-        campos_transporte = [
-            ("Frete", tb.Combobox, ["CIF", "FOB"])
-        ]
+        tb.Label(frame, text="Frete:").grid(row=1, column=0, sticky="w")
+        cb_frete = tb.Combobox(frame, values=["CIF", "FOB"], state="readonly")
+        cb_frete.grid(row=1, column=1, sticky="w")
+        self.entries_transporte = {"Frete": cb_frete}
 
-        self.entries_transporte = {}
-        for i, (campo, widget, *args) in enumerate(campos_transporte, start=1):
-            tb.Label(frame_transporte, text=f"{campo}:").grid(
-                row=i, column=0, sticky=tk.W)
-            if widget == tb.Combobox:
-                entry = widget(frame_transporte, values=args[0], state="readonly")
-            else:
-                entry = widget(frame_transporte)
-            entry.grid(row=i, column=1, sticky="ew")
-            self.entries_transporte[campo] = entry
+    def secao_itens(self, parent_frame):
+        frame = tb.LabelFrame(parent_frame, text="Itens da BO", padding=10)
+        frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-    def secao_anexo(self):
-        """Cria a seção de anexos."""
-        frame_anexo = tb.LabelFrame(
-            self.root, text="Documentos", padding=10)
-        frame_anexo.grid(row=3, column=0, sticky="ew", padx=10, pady=10)
+        # Cabeçalho
+        headers = ["CÓDIGO", "DESCRIÇÃO", "LINHA", "MOTIVO"]
+        for col, header in enumerate(headers):
+            tb.Label(frame, text=header, font=("Arial", 9, "bold")).grid(row=0, column=col, padx=5, pady=2)
 
-        self.anexo_container = tb.Frame(frame_anexo)
-        self.anexo_container.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
-
-        self.anexo_button = tb.Button(
-            frame_anexo, text="Anexar Arquivos", command=self.anexar_arquivo)
-        self.anexo_button.grid(row=1, column=0, sticky="ew", padx=5, pady=5)
-
-    def anexar_arquivo(self):
-        file_paths = filedialog.askopenfilenames(filetypes=[
-            ("Compatível", "*.jpg;*.jpeg;*.png;*.mp4;*.avi"), ("Todos os Arquivos", "*.*")])
-
-        total_size = sum(os.path.getsize(path) for path in self.anexos)
-        for file_path in file_paths:
-            total_size += os.path.getsize(file_path)
-            if total_size > self.max_tamanho_anexo:
-                messagebox.showerror(
-                    "Erro", "Você excedeu o limite de 50MB total de anexo.")
-                return
-
-        if len(self.anexos) + len(file_paths) > self.max_anexos:
-            messagebox.showerror(
-                "Erro", f"Você não pode anexar mais do que {self.max_anexos} arquivos.")
-            return
-
-        self.mostrar_texto_carregamento()
-        threading.Thread(target=self.processar_anexos,
-                         args=(file_paths,)).start()
-
-    def mostrar_texto_carregamento(self):
-        # Remover o frame de carregamento, se já existir
-        for widget in self.anexo_container.winfo_children():
-            widget.destroy()
-
-        # Criar um widget para o texto de carregamento
-        self.loading_widget = tb.Label(
-            self.anexo_container, text="Carregando anexo...", font=("Arial", 11))
-        self.loading_widget.grid(row=0, column=0, padx=5, pady=5)
-        print("Texto de carregamento sendo exibido")
-
-    def processar_anexos(self, file_paths):
-        for file_path in file_paths:
-            time.sleep(2)  # Simula o tempo de processamento
-            self.anexos.append(file_path)
-
-        self.parent.after(100, self.finalizar_carregamento)
-
-    def finalizar_carregamento(self):
-        if self.loading_widget and self.loading_widget.winfo_exists():
-            self.loading_widget.destroy()
-        self.atualizar_anexo_exibicao()
-        print("Texto de carregamento sendo removido")
-
-    def atualizar_anexo_exibicao(self):
-        """Atualiza a exibição dos anexos."""
-        for widget in self.anexo_container.winfo_children():
-            widget.destroy()
-
-        if self.anexos:
-            for i, file_path in enumerate(self.anexos):
-                if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
-                    self.exibir_imagem(file_path, i)
-                elif file_path.lower().endswith(('.mp4', '.avi')):
-                    self.exibir_video(file_path, i)
-        else:
-            label = tb.Label(self.anexo_container,
-                              text="Nenhum Arquivo Anexado.")
-
-            label.pack()
-
-    def exibir_imagem(self, file_patch, index):
-        img = Image.open(file_patch)
-        img.thumbnail((100, 100))
-        img = ImageTk.PhotoImage(img)
-
-        label = tb.Label(self.anexo_container, image=img)
-        label.image = img
-        label.grid(row=index * 2, column=0, padx=5, pady=5)
-
-        self.lixeira_icone = ImageTk.PhotoImage(
-            Image.open("./images/lixeira.png").resize((20, 20)))
-        remove_button = tb.Button(self.anexo_container, image=self.lixeira_icone,
-                                   command=lambda img=file_patch: self.remover_imagem(img))
-        remove_button.image = self.lixeira_icone
-        remove_button.grid(row=index * 2, column=1, padx=5, pady=5)
-
-    def remover_imagem(self, file_path):
-        """Remove a imagem e o botão de remoção do container."""
-        if file_path in self.anexos:
-            self.anexos.remove(file_path)
-            self.atualizar_anexo_exibicao()
-            print(f"Arquivo removido: {file_path}")
-        else:
-            print("Arquivo não encontrado na lista de anexos.")
-
-    def exibir_video(self, file_path, index):
+        # Busca itens no Protheus
+        conn = create_connection_Protheus()
+        cursor = conn.cursor()
+        query = """
+            SELECT SC6.C6_CODTIDI, SC6.C6_DESCRI, SC6.C6_LINHA
+            FROM SC6010 SC6
+            INNER JOIN SC5010 SC5
+              ON (SC5.C5_NUM = SC6.C6_NUM
+                  AND SC5.C5_FILIAL = SC6.C6_FILIAL
+                  AND SC5.D_E_L_E_T_ <> '*')
+            WHERE SC6.C6_NUM LIKE ?
+              AND SC5.C5_PEDREPR LIKE ?
+              AND SC5.C5_PEDREPR LIKE ?
+        """
         try:
-            clip = VideoFileClip(file_path)
-            frame = clip.get_frame(0)  # Pega o primeiro frame do vídeo
-            clip.close()
+            cursor.execute(query, (f"%{self.bo_dados[1]}%", "%BO%", f"%{self.bo_dados[0]}%"))
+            self.itens_bo = cursor.fetchall()
+        finally:
+            cursor.close()
+            conn.close()
 
-            # Converta o frame para um formato exibível
-            img = Image.fromarray(frame)
-            img.thumbnail((100, 100))
-            img = ImageTk.PhotoImage(img)
+        # Campos de motivo
+        self.entries_motivo_itens = []
+        motivos = self.obter_motivos()
+        for idx, (cod, desc, linha) in enumerate(self.itens_bo, start=1):
+            tb.Label(frame, text=cod).grid(row=idx, column=0, padx=5, pady=2)
+            tb.Label(frame, text=desc).grid(row=idx, column=1, padx=5, pady=2)
+            tb.Label(frame, text=linha).grid(row=idx, column=2, padx=5, pady=2)
+            cb = tb.Combobox(frame, values=motivos, width=25)
+            cb.grid(row=idx, column=3, padx=5, pady=2)
+            self.entries_motivo_itens.append(cb)
 
-            # Crie um rótulo para exibir a miniatura
-            label = tb.Label(self.anexo_container, image=img)
-            label.image = img
-            label.grid(row=index * 2, column=0, padx=5, pady=5)
-
-            # Adicione o botão de remoção
-            self.lixeira_icone = ImageTk.PhotoImage(
-                Image.open("./images/lixeira.png").resize((20, 20)))
-            remove_button = tb.Button(self.anexo_container, image=self.lixeira_icone,
-                                       command=lambda img=file_path: self.remover_imagem(img))
-            remove_button.image = self.lixeira_icone
-            remove_button.grid(row=index * 2, column=1, padx=5, pady=5)
-
-        except Exception as e:
-            print(f"Erro ao exibir vídeo: {e}")
-            label = tb.Label(self.anexo_container,
-                              text="Vídeo não pode ser exibido.")
-            label.grid(row=index * 2, column=0, padx=5, pady=5)
-
-    def fechar_janela_video(self, window, player):
-        player.stop()  # Pare o vídeo
-        window.destroy()  # Destrua a janela
-
-    def botao_salvar(self):
-        """Cria o botão de salvar."""
-        frame_botoes = tb.Frame(self.root, padding=10)
-        frame_botoes.grid(row=4, column=0, sticky="ew", padx=10, pady=10)
-
-        tb.Button(frame_botoes, text="Salvar",
-                   command=self.salvar).pack(side=tk.RIGHT)
-
-    def motivos(self):
-        """Retorna uma lista de motivos."""
-        return [
-            "Pé quebrado",
-            "Tela rasgada",
-            "Outro"
-        ]
-
-    def identificar_chamador(self):
-        if self.ultimo_modulo is None:
-            raise ValueError(
-                "É necessário informar o identificador do módulo que chamou a função")
-        return f"Tela de acompanhar BO chamada pelo módulo: {self.ultimo_modulo}"
-
-    def obter_dados_bo(self):
-        """Obtém os dados da BO selecionada na Treeview."""
-        selecionado = self.tree.selection()
-        if not selecionado:
-            return None
-
-        valores = self.tree.item(selecionado, "values")
-        if valores:
-            return valores
-        return None
+    def botao_salvar(self, parent):
+        frame = tb.Frame(parent, padding=10)
+        frame.pack(side="bottom", fill="x", padx=10, pady=10)
+        tb.Button(frame, text="Salvar", command=self.salvar).pack(side="right")
 
     def salvar(self):
-        # Salva a BO no banco e só então incrementa o número da sequência.
         conn = create_connection()
         if conn is None:
             return
-
         try:
             cursor = conn.cursor()
 
-            # Coleta os valores dos campos
-            valores = [
-                self.bo_dados[0],  # BO
-                self.bo_dados[1],  # OP
-                self.bo_dados[2],  # Cliente
-                self.bo_dados[3],  # Filial
-                self.bo_dados[4],  # Emissão
-                # Tipo de Ocorrência
-                self.entries_ocorrencia["Tipo de Ocorrência"].get(),
-                self.entries_ocorrencia["Motivo"].get(),  # Motivo
-                self.entries_ocorrencia["Descrição"].get("1.0", tk.END).strip(),  # Descrição
-                self.entries_ocorrencia["Setor Responsável"].get(),  # Descrição
-                self.entries_transporte["Frete"].get(),  # Frete
-                self.bo_dados[5],  # Previsão de Embarque
-                self.ultimo_modulo,  # Módulo que chamou a função
-                'Em Andamento',  # Status
-                self.user[1]  # Usuário que incluiu
-            ]
-
-            # Primeiro, verifica se o BO já existe
+            # Verifica se já existe
             cursor.execute(
-                "SELECT 1 FROM bo_records WHERE bo_number = ? AND D_E_L_E_T_ <> '*'", (self.bo_dados[0],))
-            exists = cursor.fetchone()
-
-            if not exists:
-                # Agora, insere os dados
-                cursor.execute('''
-                    INSERT INTO bo_records (
-                        bo_number, op, loja, filial, emissao_totvs, tipo_ocorrencia, motivo, descricao, setor_responsavel,
-                        frete, previsao_embarque, modulo, status, user_include
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', valores)
-                conn.commit()
-            else:
+                "SELECT 1 FROM bo_records WHERE bo_number = ? AND D_E_L_E_T_ <> '*'",
+                (self.bo_dados[0],)
+            )
+            if cursor.fetchone():
                 messagebox.showerror("Erro", "BO já cadastrada!")
                 self.root.destroy()
-                exibir_detalhes.instance.root.destroy()
                 return
 
-            messagebox.showinfo("Sucesso", "BO salva com sucesso!")
-            exibir_detalhes.instance.root.destroy()
+            # Insere cabeçalho
+            cursor.execute("""
+                INSERT INTO bo_records (
+                    bo_number, op, loja, filial, emissao_totvs,
+                    tipo_ocorrencia, descricao, setor_responsavel,
+                    frete, previsao_embarque, modulo, status, user_include
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                self.bo_dados[0], self.bo_dados[1], self.bo_dados[2],
+                self.bo_dados[3], self.bo_dados[4],
+                self.entries_ocorrencia["Tipo de Ocorrência"].get(),
+                self.entries_ocorrencia["Descrição"].get("1.0", tk.END).strip(),
+                self.entries_ocorrencia["Setor Responsável"].get(),
+                self.entries_transporte["Frete"].get(),
+                self.bo_dados[5], self.ultimo_modulo, 'Em Andamento',
+                self.user[1]
+            ))
 
-            # Atualiza a lista de BOs no módulo que chamou
+            # Itens
+            cursor.execute("DELETE FROM BO_ITENS WHERE BO_REF = ?", (self.bo_dados[0],))
+            for idx, (cod, desc, linha) in enumerate(self.itens_bo):
+                motivo = self.entries_motivo_itens[idx].get()
+                cursor.execute("""
+                    INSERT INTO BO_ITENS (BO_REF, COD, [DESC], LINHA, MOTIVO)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (self.bo_dados[0], cod, desc, linha, motivo))
+
+            conn.commit()
+            messagebox.showinfo("Sucesso", "BO salva com sucesso!")
+            self.root.destroy()
+            if exibir_detalhes.instance and exibir_detalhes.instance.root.winfo_exists():
+                exibir_detalhes.instance.root.destroy()
+
+            # Atualiza lista
             if self.ultimo_modulo == "Corporativo":
                 from modulos.corporativo import CorporativoModule
-                if CorporativoModule.instance is not None:
-                    if CorporativoModule.instance is not None:
-                        CorporativoModule.instance.atualizar_bos()
-                    else:
-                        print("Instância do módulo corporativo não encontrada.")
-                else:
-                    pass
+                if CorporativoModule.instance:
+                    CorporativoModule.instance.atualizar_bos()
             elif self.ultimo_modulo == "Varejo":
                 from modulos.varejo import VarejoModule
-                if VarejoModule.instance is not None:
-                    if VarejoModule.instance is not None:
-                        VarejoModule.instance.atualizar_bos()
-                    else:
-                        print("Instância do módulo varejo não encontrada.")
-                else:
-                    pass
+                if VarejoModule.instance:
+                    VarejoModule.instance.atualizar_bos()
             elif self.ultimo_modulo == "Exportacao":
                 from modulos.exportacao import ExportacaoModule
-                if ExportacaoModule.instance is not None:
-                    if ExportacaoModule.instance is not None:
-                        ExportacaoModule.instance.atualizar_bos()
-                    else:
-                        print("Instância do módulo exportacao não encontrada.")
-                else:
-                    pass
-
-            self.root.destroy()
+                if ExportacaoModule.instance:
+                    ExportacaoModule.instance.atualizar_bos()
 
         except pyodbc.Error as e:
             messagebox.showerror("Erro", f"Erro ao salvar BO: {e}")
@@ -2846,3 +2967,8 @@ class acompanhar_Bo:
             if conn:
                 cursor.close()
                 conn.close()
+
+    def identificar_chamador(self):
+        if self.ultimo_modulo is None:
+            raise ValueError("É necessário informar o identificador do módulo que chamou a função")
+        return f"Tela de Acompanhar BO chamada pelo módulo: {self.ultimo_modulo}"
