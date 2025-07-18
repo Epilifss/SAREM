@@ -5,7 +5,6 @@ import sys
 import atexit
 import psutil
 import tempfile
-from tkinter import messagebox
 from theme import temas
 
 root = tb.Window()
@@ -40,8 +39,10 @@ def mostrar_splash(root):
 splash = mostrar_splash(root)
 root.update()
 
-from funcoes import *
-from database import garantir_config_ini
+# from funcoes import *
+from front.login_window import LoginWindow
+from back.utils import verificar_e_att
+from back.database import garantir_config_ini
 
 LOCKFILE = os.path.join(tempfile.gettempdir(), 'sarem_app.lock')
 

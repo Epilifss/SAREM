@@ -37,16 +37,16 @@ from textwrap import wrap
 from components import *
 
 # Modulos
-from modulos.corporativo import CorporativoModule
+from front.corporativo_view import CorporativoModule
 from modulos.varejo import VarejoModule
 from modulos.exportacao import ExportacaoModule
 
 # Banco de dados
-from database import create_connection_Protheus
-from database import create_connection
+from back.database import create_connection_Protheus
+from back.database import create_connection
 
 # Estilos
-from theme import temas, estilizar_treeview, ajustar_largura_colunas
+from theme import ajustar_largura_colunas
 
 # Funções
 

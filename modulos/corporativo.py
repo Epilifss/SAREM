@@ -5,7 +5,7 @@ from tkinter import messagebox
 from functools import partial
 from funcoes import *
 from components import *
-from database import create_connection
+from back.database import create_connection
 from theme import estilizar_treeview, ajustar_largura_colunas
 
 def resource_path(relative_path):
