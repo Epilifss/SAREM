@@ -6,7 +6,7 @@ from back.database import create_connection
 from theme import estilizar_treeview, ajustar_largura_colunas
 
 class Header:
-    def __init__(self, parent, user, caller_id=None, tree=None):
+    def __init__(self, parent, user, caller_id=None, tree=None, refresh_callback=None):
         self.user = user
         self.parent = parent
 
@@ -20,8 +20,8 @@ class Header:
         tb.Button(header, text="Estatísticas", command=self.abrir_estatisticas).pack(side=tk.LEFT)
         tb.Button(header, text="Gerar Relatório", command=self.abrir_relatorios).pack(side=tk.LEFT)
         # tb.Button(header, text="Gerar Nova BO", command=self.abrir_gerar_bo).pack(side=tk.LEFT)
-        tb.Button(header, text="Atualizar", command=lambda: self.carregar_bos()).pack(side=tk.LEFT)
-        tb.Button(header, text="Acompanhar uma BO", command=self.abrir_buscar_bo).pack(side=tk.LEFT)
+        tb.Button(header, text="Atualizar", command=lambda: refresh_callback()).pack(side=tk.LEFT)
+        tb.Button(header, text="Acompanhar uma BO", command=lambda: self.abrir_buscar_bo(refresh_callback)).pack(side=tk.LEFT)
         tb.Button(header, text="Logoff", command=self.logoff, style="custom.TButton").pack(side=tk.RIGHT, padx=5)
 
     def abrir_embarcados(self):
@@ -44,9 +44,9 @@ class Header:
         janela = gerarBO(self.parent, caller_id=self.ultimo_modulo)
         self.parent.wait_window(janela.root)
 
-    def abrir_buscar_bo(self):
-        from funcoes import buscarBo
-        janela = buscarBo(self.parent, caller_id=self.ultimo_modulo, user=self.user)
+    def abrir_buscar_bo(self, refresh_callback=None):
+        from front.buscar_bo import BuscarBOView
+        janela = BuscarBOView(self.parent, caller_id=self.ultimo_modulo, user=self.user, refresh_callback=refresh_callback)
         self.parent.wait_window(janela.root)
 
     def carregar_bos(self):

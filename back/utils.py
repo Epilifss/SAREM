@@ -24,25 +24,18 @@ def get_config_path():
     os.makedirs(config_dir, exist_ok=True)
     return os.path.join(config_dir, 'config.ini')
 
-# Exemplo de como center_window deve ser em back/utils.py
-import tkinter as tk
-
 def center_window(window_obj: tk.Toplevel):
     window_obj.update_idletasks()
 
-    # Obtém as dimensões da janela
     width = window_obj.winfo_width()
     height = window_obj.winfo_height()
 
-    # Obtém as dimensões da tela
     screen_width = window_obj.winfo_screenwidth()
     screen_height = window_obj.winfo_screenheight()
 
-    # Calcula as coordenadas X e Y para centralizar
     x = (screen_width // 2) - (width // 2)
     y = (screen_height // 2) - (height // 2)
 
-    # Define a geometria da janela
     window_obj.geometry(f'{width}x{height}+{x}+{y}')
 
 def center_window_child(child, parent):

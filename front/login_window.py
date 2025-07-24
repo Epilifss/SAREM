@@ -9,7 +9,7 @@ import configparser
 from back.utils import resource_path, get_config_path, monitorar_bo_embarcadas
 from back.user_service import autenticar_usuario
 from front.admin_panel import AdminPanel
-from front.components.dialogs import DialogSenhaAdmin
+from front.components.dialogs import DialogSenhaAdmin, chooseModuleDialog
 from front.modals.config_db import ConfigDBModal
 from front.corporativo_view import CorporativoModule
 from front.varejo_view import VarejoModule
@@ -113,17 +113,36 @@ class LoginWindow:
             self.root.destroy()
             print(printUser + "módulo Corporativo " + hora)
             monitorar_bo_embarcadas()
-            CorporativoModule(user, self.parent)
+            CorporativoModule(user.username, self.parent)
         elif user.module == '1':
             self.root.destroy()
             print(printUser + "módulo Varejo " + hora)
             monitorar_bo_embarcadas()
-            VarejoModule(user, self.parent)
+            VarejoModule(user.username, self.parent)
         elif user.module == '2':
             self.root.destroy()
             print(printUser + "módulo Exportação " + hora)
             monitorar_bo_embarcadas()
-            ExportacaoModule(user, self.parent)
+            ExportacaoModule(user.username, self.parent)
+        elif user.module == '3':
+            dialog = chooseModuleDialog(self.root, printUser, hora, user)
+
+            chosen_module_type, chosen_user, chosen_print_user, chosen_hora = dialog.get_chosen_module()
+
+            if chosen_module_type:
+                self.root.destroy()
+
+                if chosen_module_type == 'Corporativo':
+                    print(f"{chosen_print_user}módulo Corporativo {chosen_hora}")
+                    monitorar_bo_embarcadas()
+                    CorporativoModule(chosen_user, self.parent)
+                elif chosen_module_type == 'Varejo':
+                    print(f"{chosen_print_user} módulo Varejo {chosen_hora}")
+                    monitorar_bo_embarcadas()
+                    VarejoModule(chosen_user, self.parent)
+                else:
+                    messagebox.showerror("Erro", "Módulo selecionado inválido. Contate o administrador.")
+                    return
         else:
             messagebox.showerror("Erro", "Módulo do usuário não encontrado. Contate o administrador.")
             return

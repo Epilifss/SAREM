@@ -22,14 +22,14 @@ class ConfigDBModal:
             self.config = configparser.ConfigParser()
             self.config.read(CONFIG_PATH)
 
-            # Campos para o banco SAREM
+            # Campos SAREM
             campos_db = [
                 ("server", "Servidor"),
                 ("database", "Banco de Dados"),
                 ("user", "Usuário"),
                 ("password", "Senha")
             ]
-            # Campos para o banco Protheus
+            # Campos Protheus
             campos_prot = [
                 ("server", "Servidor"),
                 ("database", "Banco"),

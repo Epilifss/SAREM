@@ -3,6 +3,7 @@ from back.utils import resource_path
 from front.components.header import Header
 from front.components.searchbar import SearchBar
 from front.components.treeview import listagemTreeview
+from front.modals.show_details import exibir_detalhes
 from functools import partial
 from theme import estilizar_treeview, ajustar_largura_colunas
 import tkinter as tk
@@ -23,18 +24,17 @@ class ExportacaoModule:
         ExportacaoModule.instance = self
 
         # Cabeçalho
-        self.header = Header(self.root, self.user, caller_id="Exportacao", tree=None)
+        self.header = Header(self.root, self.user, caller_id="Exportacao", tree=None, refresh_callback=self.carregar_bos)
 
         # Barra de pesquisa
         self.search_bar = SearchBar(self.root, self.pesquisar_bo, self.clear_search)
 
         # Lista de BOs
-        from funcoes import exibir_detalhes_acompanhando
 
         self.treeview = listagemTreeview(
             self.root,
             columns=["BO", "OP", "STATUS", "TIPO DE OCORRÊNCIA", "SETOR RESPONSÁVEL", "CLIENTE"],
-            on_double_click=partial(exibir_detalhes_acompanhando, caller_id="Exportacao", user=self.user)
+            on_double_click=partial(exibir_detalhes, caller_id="Exportacao", user=self.user)
         )
         self.tree = self.treeview.tree
         self.header.tree = self.tree
