@@ -37,7 +37,7 @@ from textwrap import wrap
 from components import *
 
 # Modulos
-from front.corporativo_view import CorporativoModule
+from front.windows.corporativo_view import CorporativoModule
 from modulos.varejo import VarejoModule
 from modulos.exportacao import ExportacaoModule
 
@@ -2636,6 +2636,8 @@ class editar_Bo:
 
     def obter_setores(self):
         conn = create_connection()
+        if conn is None:
+            return []
         cursor = conn.cursor()
         cursor.execute("SELECT DISTINCT setor_responsavel FROM bo_records WHERE setor_responsavel IS NOT NULL AND setor_responsavel NOT LIKE ''")
         setores = [row[0] for row in cursor.fetchall()]
@@ -2645,6 +2647,8 @@ class editar_Bo:
 
     def obter_motivos(self):
         conn = create_connection()
+        if conn is None:
+            return []
         cursor = conn.cursor()
         cursor.execute("SELECT DISTINCT MOTIVO FROM BO_ITENS WHERE MOTIVO IS NOT NULL AND MOTIVO NOT LIKE ''")
         motivos = [row[0] for row in cursor.fetchall()]
@@ -2656,6 +2660,9 @@ class editar_Bo:
         try:
             conn = create_connection()
 
+            if conn is None:
+                return []
+            
             cursor = conn.cursor()
 
             update_query = """

@@ -20,7 +20,7 @@ class Header:
         tb.Button(header, text="Estatísticas", command=self.abrir_estatisticas).pack(side=tk.LEFT)
         tb.Button(header, text="Gerar Relatório", command=self.abrir_relatorios).pack(side=tk.LEFT)
         # tb.Button(header, text="Gerar Nova BO", command=self.abrir_gerar_bo).pack(side=tk.LEFT)
-        tb.Button(header, text="Atualizar", command=lambda: refresh_callback()).pack(side=tk.LEFT)
+        tb.Button(header, text="Atualizar", command=lambda: refresh_callback() if refresh_callback else None).pack(side=tk.LEFT)
         tb.Button(header, text="Acompanhar uma BO", command=lambda: self.abrir_buscar_bo(refresh_callback)).pack(side=tk.LEFT)
         tb.Button(header, text="Logoff", command=self.logoff, style="custom.TButton").pack(side=tk.RIGHT, padx=5)
 
@@ -35,8 +35,8 @@ class Header:
         self.parent.wait_window(janela.root)
 
     def abrir_relatorios(self):
-        from funcoes import Relatorios
-        janela = Relatorios(self.parent, caller_id=self.ultimo_modulo)
+        from front.windows.report import ReportView
+        janela = ReportView(self.parent, caller_id=self.ultimo_modulo)
         self.parent.wait_window(janela.root)
 
     def abrir_gerar_bo(self):
@@ -45,7 +45,7 @@ class Header:
         self.parent.wait_window(janela.root)
 
     def abrir_buscar_bo(self, refresh_callback=None):
-        from front.buscar_bo import BuscarBOView
+        from front.windows.buscar_bo import BuscarBOView
         janela = BuscarBOView(self.parent, caller_id=self.ultimo_modulo, user=self.user, refresh_callback=refresh_callback)
         self.parent.wait_window(janela.root)
 
@@ -54,6 +54,7 @@ class Header:
         if conn is None:
             return
 
+        cursor = None
         try:
             cursor = conn.cursor()
             query = ("SELECT bo_number, op, status, tipo_ocorrencia, setor_responsavel, loja FROM bo_records WHERE status NOT LIKE 'Embarcado' AND modulo LIKE ? AND D_E_L_E_T_ <> '*'")
@@ -61,36 +62,38 @@ class Header:
             rows = cursor.fetchall()
 
             # Remove todos os itens atuais da Treeview
-            for item in self.tree.get_children():
-                self.tree.delete(item)
+            if self.tree is not None:
+                for item in self.tree.get_children():
+                    self.tree.delete(item)
 
-            # Insere os dados "limpos" na Treeview
-            for row in rows:
-                # Converte cada valor para string (se não for None) e aplica strip para remover caracteres indesejados.
-                bo = str(row[0]).strip("(' ,)") if row[0] is not None else ""
-                op = str(row[1]).strip("(' ,)") if row[1] is not None else ""
-                status = str(row[2]).strip("(' ,)") if row[2] is not None else ""
-                tipo_ocorrencia = str(row[3]).strip("(' ,)") if row[3] is not None else ""
-                setor_responsavel = str(row[4]).strip("(' ,)") if row[4] is not None else ""
-                loja = str(row[5]).strip("(' ,)") if row[5] is not None else ""
+                # Insere os dados "limpos" na Treeview
+                for row in rows:
+                    # Converte cada valor para string (se não for None) e aplica strip para remover caracteres indesejados.
+                    bo = str(row[0]).strip("(' ,)") if row[0] is not None else ""
+                    op = str(row[1]).strip("(' ,)") if row[1] is not None else ""
+                    status = str(row[2]).strip("(' ,)") if row[2] is not None else ""
+                    tipo_ocorrencia = str(row[3]).strip("(' ,)") if row[3] is not None else ""
+                    setor_responsavel = str(row[4]).strip("(' ,)") if row[4] is not None else ""
+                    loja = str(row[5]).strip("(' ,)") if row[5] is not None else ""
 
-                self.tree.insert("", tk.END, values=(
-                    bo, op, status, tipo_ocorrencia, setor_responsavel, loja))
-                
+                    self.tree.insert("", tk.END, values=(
+                        bo, op, status, tipo_ocorrencia, setor_responsavel, loja))
+                    
                 estilizar_treeview(self.tree)
                 ajustar_largura_colunas(self.tree)
         except pyodbc.Error as e:
             messagebox.showerror("Erro", f"Erro ao carregar BOs: {e}")
         finally:
             if conn:
-                cursor.close()
                 conn.close()
+            if cursor:
+                cursor.close()
 
     def logoff(self):
         root_principal = self.parent.master
         self.parent.destroy()
-        from front.login_window import LoginWindow
-        from back.utils import monitorar_bo_event
+        from front.windows.login_window import LoginWindow
+        from back.bo_monitor import monitorar_bo_event
         monitorar_bo_event.set()
         login = LoginWindow(root_principal)
         login.root.after(100, login.root.focus_force)

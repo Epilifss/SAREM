@@ -55,14 +55,22 @@ class NovoUsuarioModal:
     def salvar(self):
         username = self.entries["Usuário"].get()
         password = self.entries["Senha"].get()
+
+        if not username or not password:
+            messagebox.showwarning("Atenção", "Usuário e Senha são campos obrigatórios.")
+            return
+
         hashed_pw = hashlib.sha256(password.encode()).hexdigest()
-        module = self.entries["Módulo"].get()
+        module_str = self.entries["Módulo"].get()
         is_admin = 1 if self.entries["Admin"].get() == "Sim" else 0
-        module = 0 if self.entries["Módulo"].get(
-        ) == "Corporativo" else 1 if self.entries["Módulo"].get() == "Varejo" else 2 if self.entries["Módulo"].get() == "Exportação" else 3 if self.entries["Módulo"].get() == "Comercial" else 4
+        module_map = {
+            "Corporativo": 0, "Varejo": 1, "Exportação": 2, "Comercial": 3
+        }
+        module = module_map.get(module_str, 4) # 4 é o valor padrão caso não encontre
 
         try:
-            criar_usuario(self.root, username, hashed_pw, module, is_admin)
+            # A função `criar_usuario` espera 4 argumentos, o `self.root` não deve ser passado.
+            criar_usuario(username, hashed_pw, module, is_admin)
             messagebox.showinfo("Sucesso", "Usuário cadastrado com sucesso!")
             self.admin_panel.carregar_usuarios()
             self.root.destroy()

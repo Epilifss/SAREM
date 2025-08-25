@@ -101,4 +101,4 @@ class chooseModuleDialog:
         self.root.destroy()
 
     def get_chosen_module(self):
-        return self.chosen_module, self.user, self.printUser, self.hora
+        return self.chosen_module, self.printUser, self.hora

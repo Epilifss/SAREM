@@ -7,6 +7,8 @@ import tkinter as tk
 
 def listar_bos(modulo):
     conn = create_connection()
+    if conn is None:
+        return None
     cursor = conn.cursor()
     query = """
         SELECT bo_number, op, loja, filial, emissao_totvs, tipo_ocorrencia, descricao, setor_responsavel, frete, previsao_embarque, modulo, status, user_include
@@ -21,6 +23,8 @@ def listar_bos(modulo):
 
 def listar_bo_protheus():
     conn = create_connection_Protheus()
+    if conn is None:
+        return None
     cursor = conn.cursor()
     cursor.execute("""
                 SELECT C5_PEDREPR, C5_NUM, C5_NOME, IIF(C5_FILIAL='0101','TIDELLI','NAUTICA') AS FILIAL, CONVERT(VARCHAR,CONVERT(DATETIME,C5_EMISSAO),103) as EMISSAO, CONVERT(VARCHAR,CONVERT(DATETIME,C5_ENTREGA),103) as PREVISAO_ENTREGA
@@ -38,6 +42,8 @@ def listar_bo_protheus():
     
 def pesquisar_bo(modulo, termo):
     conn = create_connection()
+    if conn is None:
+        return None
     cursor = conn.cursor()
     cursor.execute("SELECT bo_number, op, status, tipo_ocorrencia, setor_responsavel, loja FROM bo_records WHERE modulo LIKE ? AND status NOT LIKE 'Embarcado' AND bo_number LIKE ? AND D_E_L_E_T_ <> '*'", (modulo, f"%{termo}%",))
     rows = cursor.fetchall()
@@ -47,6 +53,8 @@ def pesquisar_bo(modulo, termo):
 
 def pesquisar_bo_protheus(termo):
     conn = create_connection_Protheus()
+    if conn is None:
+        return None
     cursor = conn.cursor()
     like_termo = f"%{termo}%"
     query = """
@@ -67,14 +75,10 @@ def pesquisar_bo_protheus(termo):
     conn.close()
     return rows
 
-def excluir_bo(self):
-        print(f"Usuário {self.user[1]} solicitou a exclusão da BO.")
-
-        resposta = messagebox.askyesno("Confirmação",
-            "Você tem certeza que deseja excluir esta BO? Esta ação não pode ser desfeita.",
-            icon=messagebox.WARNING
-        )
-
+def excluir_bo(self, refresh_callback=None):
+        conn = None
+        cursor = None
+        
         item_selecionado = self.tree.selection()
         if not item_selecionado:
             messagebox.showwarning("Aviso", "Nenhum item selecionado.")
@@ -83,59 +87,47 @@ def excluir_bo(self):
         valores = self.tree.item(item_selecionado, "values")
         bo_number = valores[0]
 
-        
+        print(f"Usuário {self.user} solicitou a exclusão da {bo_number}.")
+
+        resposta = messagebox.askyesno("Confirmação",
+            "Você tem certeza que deseja excluir esta BO? Esta ação não pode ser desfeita.",
+            icon=messagebox.WARNING
+        )
+
         if resposta is True:
             try:
                 conn = create_connection()
+                if conn is None:
+                    return None
                 cursor = conn.cursor()
                 cursor.execute("""
                     UPDATE bo_records
                     SET D_E_L_E_T_ = '*', user_delet = ?, deleted_at = GETDATE()
                     WHERE bo_number = ?
-                """, (self.user[1]), str(bo_number,))
+                """, (self.user), str(bo_number,))
                 conn.commit()
                 messagebox.showinfo("Sucesso", f"{bo_number} excluída com sucesso!")
+                if refresh_callback:
+                    refresh_callback()
+                print(f"{self.user} excluiu a {bo_number}.")
                 self.root.destroy()
             except pyodbc.Error as e:
                 messagebox.showerror("Erro", f"Erro ao excluir BO: {e}")
                 self.root.destroy()
             finally:
-                if conn:
+                if cursor:
                     cursor.close()
+                if conn:
                     conn.close()
 
-            if self.ultimo_modulo == "Corporativo":
-                from modulos.corporativo import CorporativoModule
-                if CorporativoModule.instance is not None:
-                    if CorporativoModule.instance is not None:
-                        CorporativoModule.instance.atualizar_bos()
-                    else:
-                        print("Instância do módulo corporativo não encontrada.")
-                else:
-                    pass
-            elif self.ultimo_modulo == "Varejo":
-                from modulos.varejo import VarejoModule
-                if VarejoModule.instance is not None:
-                    if VarejoModule.instance is not None:
-                        VarejoModule.instance.atualizar_bos()
-                    else:
-                        print("Instância do módulo varejo não encontrada.")
-                else:
-                    pass
-            elif self.ultimo_modulo == "Exportacao":
-                from modulos.exportacao import ExportacaoModule
-                if ExportacaoModule.instance is not None:
-                    if ExportacaoModule.instance is not None:
-                        ExportacaoModule.instance.atualizar_bos()
-                    else:
-                        print("Instância do módulo exportacao não encontrada.")
-                else:
-                    pass
         else:
+            print(f"{self.user} não excluiu a {bo_number}.")
             pass
 
 def verificar_bo_acompanhada(bo_number):
     conn = create_connection()
+    if conn is None:
+        return None
     cursor = conn.cursor()
     cursor.execute("SELECT 1 FROM bo_records WHERE bo_number = ? AND D_E_L_E_T_ <> '*'", (bo_number,))
     exists = cursor.fetchone()
@@ -143,6 +135,8 @@ def verificar_bo_acompanhada(bo_number):
 
 def listar_itens_bo(valor1, valor2):
     conn = create_connection_Protheus()
+    if conn is None:
+        return None
     cursor = conn.cursor()
 
     query = """SELECT SC6.C6_CODTIDI, SC6.C6_DESCRI, SC6.C6_LINHA
@@ -158,6 +152,8 @@ def listar_itens_bo(valor1, valor2):
 
 def listar_itens_SAREM(valor1, valor2):
     conn = create_connection()
+    if conn is None:
+        return None
     cursor = conn.cursor()
 
     query = """SELECT COD, [DESC], LINHA, BI.MOTIVO
@@ -173,6 +169,8 @@ def listar_itens_SAREM(valor1, valor2):
 
 def obter_setores():
     conn = create_connection()
+    if conn is None:
+        return None
     cursor = conn.cursor()
     cursor.execute(
         "SELECT DISTINCT setor_responsavel FROM bo_records "
@@ -185,6 +183,8 @@ def obter_setores():
 
 def obter_motivos():
     conn = create_connection()
+    if conn is None:
+        return None
     cursor = conn.cursor()
     cursor.execute(
         "SELECT DISTINCT MOTIVO FROM BO_ITENS "
@@ -195,11 +195,41 @@ def obter_motivos():
     conn.close()
     return rows
 
+def obter_detalhes_ocorrencia(bo_number):
+    conn = create_connection()
+    if conn is None:
+        return None
+    cursor = conn.cursor()
+    
+    query = """SELECT bo_number, op, loja, CONVERT(VARCHAR,CONVERT(DATETIME,previsao_embarque),103), [status]
+        FROM bo_records
+        WHERE bo_number LIKE ? AND D_E_L_E_T_ <> '*'"""
+
+    cursor.execute(query, (f"%{bo_number}%",))
+    itens_bo = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return itens_bo if itens_bo else None
+
+def obter_campos_editaveis(bo_number):
+    conn = create_connection()
+    if conn is None:
+        return None
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT tipo_ocorrencia, descricao, setor_responsavel, frete FROM bo_records WHERE bo_number = ? AND D_E_L_E_T_ <> '*'", (bo_number,))
+    campos_editaveis = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return campos_editaveis if campos_editaveis else None
+
 def salvar_bo(bo_dados, ocorrencia_data, transporte_data, user_data, itens_com_motivos, ultimo_modulo):
     conn = None 
     cursor = None
     try:
         conn = create_connection()
+        if conn is None:
+            return None
         cursor = conn.cursor()
 
         cursor.execute("SELECT 1 FROM bo_records WHERE bo_number = ? AND D_E_L_E_T_ <> '*'", (bo_dados[0],))
@@ -260,12 +290,51 @@ def salvar_bo(bo_dados, ocorrencia_data, transporte_data, user_data, itens_com_m
         if conn:
             conn.close()
 
+def atualizar_bo(bo_number, dados_bo, dados_itens):
+    conn = create_connection()
+    if conn is None:
+        return None
+    cursor = conn.cursor()
+
+    update_query = """
+                UPDATE bo_records
+                SET tipo_ocorrencia = ?,
+                    descricao = ?,
+                    setor_responsavel = ?,
+                    frete = ?
+                WHERE bo_number = ?
+            """
+
+    try:
+        print(*dados_bo)
+        cursor.execute(
+                update_query, (*dados_bo, bo_number))
+        
+        cursor.executemany("""
+                UPDATE BO_ITENS
+                SET MOTIVO = ?
+                WHERE BO_REF = ? AND COD = ?
+            """, dados_itens)
+        
+        conn.commit()
+    except pyodbc.Error as e:
+        if conn:
+            conn.rollback()
+        raise e
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
 def buscar_dados_bo(bo_number):
     conn = create_connection()
+    if conn is None:
+        return None
     cursor = conn.cursor()
     query = """SELECT bo_number, op, loja, tipo_ocorrencia, CONVERT(VARCHAR,CONVERT(DATETIME,previsao_embarque),103), descricao, frete, [status]
         FROM bo_records
-        WHERE bo_number LIKE ?"""
+        WHERE bo_number LIKE ? AND D_E_L_E_T_ <> '*'"""
     cursor.execute(query, bo_number)
     row = cursor.fetchone()
     cursor.close()

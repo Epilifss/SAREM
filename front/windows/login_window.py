@@ -6,17 +6,18 @@ from PIL import Image, ImageTk
 import datetime
 import configparser
 
-from back.utils import resource_path, get_config_path, monitorar_bo_embarcadas
+from back.utils import resource_path, get_config_path
+from back.bo_monitor import monitorar_bo_embarcadas
 from back.user_service import autenticar_usuario
-from front.admin_panel import AdminPanel
+from front.windows.admin_panel import AdminPanel
 from front.components.dialogs import DialogSenhaAdmin, chooseModuleDialog
 from front.modals.config_db import ConfigDBModal
-from front.corporativo_view import CorporativoModule
-from front.varejo_view import VarejoModule
-from front.exportacao_view import ExportacaoModule
+from front.windows.corporativo_view import CorporativoModule
+from front.windows.varejo_view import VarejoModule
+from front.windows.exportacao_view import ExportacaoModule
+from front import versao
 
-with open(resource_path('versao.txt'), encoding='utf-8') as f:
-    VERSAO_ATUAL = f.read().strip()
+VERSAO_ATUAL = versao
 CONFIG_PATH = get_config_path()
 
 class LoginWindow:
@@ -25,7 +26,6 @@ class LoginWindow:
         self.root = tk.Toplevel(parent)
         self.root.title("SAREM")
         self.root.iconbitmap(resource_path('SAREM.ico'))
-        self.root.geometry("1000x600")
         self.root.state('zoomed')
         self.root.focus_set()
         self.root.protocol("WM_DELETE_WINDOW", parent.destroy)
@@ -127,7 +127,7 @@ class LoginWindow:
         elif user.module == '3':
             dialog = chooseModuleDialog(self.root, printUser, hora, user)
 
-            chosen_module_type, chosen_user, chosen_print_user, chosen_hora = dialog.get_chosen_module()
+            chosen_module_type, chosen_print_user, chosen_hora = dialog.get_chosen_module()
 
             if chosen_module_type:
                 self.root.destroy()
@@ -135,11 +135,11 @@ class LoginWindow:
                 if chosen_module_type == 'Corporativo':
                     print(f"{chosen_print_user}módulo Corporativo {chosen_hora}")
                     monitorar_bo_embarcadas()
-                    CorporativoModule(chosen_user, self.parent)
+                    CorporativoModule(user.username, self.parent)
                 elif chosen_module_type == 'Varejo':
                     print(f"{chosen_print_user} módulo Varejo {chosen_hora}")
                     monitorar_bo_embarcadas()
-                    VarejoModule(chosen_user, self.parent)
+                    VarejoModule(user.username, self.parent)
                 else:
                     messagebox.showerror("Erro", "Módulo selecionado inválido. Contate o administrador.")
                     return

@@ -8,23 +8,24 @@ from functools import partial
 from theme import estilizar_treeview, ajustar_largura_colunas
 import tkinter as tk
 
-class ExportacaoModule:
+class CorporativoModule:
     instance = None # Var de class que armazena a instância atual
 
     def __init__(self, user, parent):
         self.user = user
         self.root = tk.Toplevel(parent)
-        self.root.title("SAREM - Módulo Exportação")
+        self.root.title("SAREM - Módulo Corporativo")
         self.root.state('zoomed')
 
         self.root.iconbitmap(resource_path('SAREM.ico'))  # Define o ícone da janela
 
         self.root.protocol("WM_DELETE_WINDOW", parent.destroy)
+        self.root.bind('<F5>', self.carregar_bos)
 
-        ExportacaoModule.instance = self
+        CorporativoModule.instance = self
 
         # Cabeçalho
-        self.header = Header(self.root, self.user, caller_id="Exportacao", tree=None, refresh_callback=self.carregar_bos)
+        self.header = Header(self.root, self.user, caller_id="Corporativo", tree=None, refresh_callback=self.carregar_bos)
 
         # Barra de pesquisa
         self.search_bar = SearchBar(self.root, self.pesquisar_bo, self.clear_search)
@@ -34,7 +35,7 @@ class ExportacaoModule:
         self.treeview = listagemTreeview(
             self.root,
             columns=["BO", "OP", "STATUS", "TIPO DE OCORRÊNCIA", "SETOR RESPONSÁVEL", "CLIENTE"],
-            on_double_click=partial(exibir_detalhes, caller_id="Exportacao", user=self.user)
+            on_double_click=partial(exibir_detalhes, caller_id="Corporativo", user=self.user)
         )
         self.tree = self.treeview.tree
         self.header.tree = self.tree
@@ -43,31 +44,33 @@ class ExportacaoModule:
         self.search_bar.search_entry.bind('<Return>', self.pesquisar_bo)
         self.root.mainloop()
 
-    def carregar_bos(self):
-        bos = listar_bos("Exportacao")
+    def carregar_bos(self, event=None):
+        bos = listar_bos("Corporativo")
         self.tree.delete(*self.tree.get_children())
-        for bo in bos:
-            self.tree.insert(
-                '', 'end',
-                values=(
-                    bo.bo_number, bo.op, bo.status, bo.tipo_ocorrencia,
-                    bo.setor_responsavel, bo.loja
+        if bos:
+            for bo in bos:
+                self.tree.insert(
+                    '', 'end',
+                    values=(
+                        bo.bo_number, bo.op, bo.status, bo.tipo_ocorrencia,
+                        bo.setor_responsavel, bo.loja
+                    )
                 )
-            )
         estilizar_treeview(self.tree)
         ajustar_largura_colunas(self.tree)
 
     def pesquisar_bo(self, event=None):
-        pesq = pesquisar_bo('Exportacao', self.search_bar.search_entry.get())
+        pesq = pesquisar_bo('Corporativo', self.search_bar.search_entry.get())
         self.tree.delete(*self.tree.get_children())
-        for row in pesq:
-            self.tree.insert(
-                '', 'end',
-                values=(
-                    row[0], row[1], row[2], row[3],
-                    row[4], row[5]
+        if pesq:
+            for row in pesq:
+                self.tree.insert(
+                    '', 'end',
+                    values=(
+                        row[0], row[1], row[2], row[3],
+                        row[4], row[5]
+                    )
                 )
-            )
 
     def clear_search(self):
         self.search_bar.search_entry.delete(0, tk.END)

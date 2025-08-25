@@ -2,6 +2,8 @@ import tkinter as tk
 import ttkbootstrap as tb
 from back.utils import resource_path, center_window
 from front.modals.acompanharBO import acompanhar_Bo
+from front.modals.edit_bo import editar_bo
+from back.bo_service import excluir_bo
 
 class exibir_detalhes():
     instance = None
@@ -27,6 +29,9 @@ class exibir_detalhes():
 
         item_selecionado = self.tree.selection()
         valores = self.tree.item(item_selecionado, "values") if item_selecionado else None
+        if valores is None or len(valores) == 0:
+            self.root.destroy()
+            return
         bo = valores[0]
 
         self.bo_ja_acompanhada = verificar_bo_acompanhada(bo)
@@ -46,10 +51,10 @@ class exibir_detalhes():
         else:
             detalhe_row = 0
 
-        self.sc5_detalhes(row=detalhe_row, buscar_call=buscar_call, caller_id=caller_id)
+        self.detalhes_ocorrencia(row=detalhe_row, buscar_call=buscar_call, caller_id=caller_id)
         self.itens_bo(row=detalhe_row + 1, caller_id=caller_id, buscar_call=buscar_call)
 
-        modulos = ["Corporativo", "Varejo", "Exportação"]
+        modulos = ["Corporativo", "Varejo", "Exportacao"]
 
         if not (self.bo_ja_acompanhada and (caller_id in modulos and buscar_call == "buscarBO")):
             self.opcoes_bo(row=detalhe_row + 2, caller_id=caller_id, refresh_callback=refresh_callback, buscar_call=buscar_call)
@@ -57,7 +62,7 @@ class exibir_detalhes():
         self.root.update_idletasks()
         center_window(self.root)
 
-    def sc5_detalhes(self, row=0, buscar_call=None, caller_id=None):
+    def detalhes_ocorrencia(self, row=0, buscar_call=None, caller_id=None):
         self.root.grid_rowconfigure(row, weight=3)
         self.root.grid_columnconfigure(0, weight=1)
 
@@ -76,7 +81,7 @@ class exibir_detalhes():
 
         valores = self.tree.item(item_selecionado, "values")
 
-        modulos = ["Corporativo", "Varejo", "Exportação"]
+        modulos = ["Corporativo", "Varejo", "Exportacao"]
 
         labels = ["BO:", "OP:", "CLIENTE:", "FILIAL:", "EMISSÃO:", "PREVISÃO DE ENTREGA:"]
         labels2 = ["BO:", "OP:", "CLIENTE:", "TIPO DE OCORRÊNCIA:", "PREVISÃO DE EMBARQUE:", "DESCRIÇÃO:", "FRETE:", "STATUS:"]
@@ -132,11 +137,12 @@ class exibir_detalhes():
             label.grid(row=0, column=i, sticky="w", padx=5, pady=2)
             frame_itensBo.grid_columnconfigure(i, weight=1)
 
-        for idx, item in enumerate(itens_bo):
-            for col, value in enumerate(item):
-                label = tb.Label(frame_itensBo, text=value)
-                label.grid(row=idx + 1, column=col, sticky="w", padx=5, pady=2)
-                frame_itensBo.grid_columnconfigure(col, weight=1)
+        if itens_bo is not None:
+            for idx, item in enumerate(itens_bo):
+                for col, value in enumerate(item):
+                    label = tb.Label(frame_itensBo, text=value)
+                    label.grid(row=idx + 1, column=col, sticky="w", padx=5, pady=2)
+                    frame_itensBo.grid_columnconfigure(col, weight=1)
 
         self.root.update_idletasks()
         self.root.geometry("")
@@ -152,10 +158,24 @@ class exibir_detalhes():
         frame_opcoesBo.grid_rowconfigure(0, weight=1)
         frame_opcoesBo.grid_columnconfigure(0, weight=1)
 
-        modulos = ["Corporativo", "Varejo", "Exportação"]
+        modulos = ["Corporativo", "Varejo", "Exportacao"]
 
         if buscar_call == "buscarBO":
             tb.Button(frame_opcoesBo, text="Acompanhar BO", command=lambda: acompanhar_Bo(self.root, self.tree, caller_id=self.ultimo_modulo, user=self.user, refresh_callback=refresh_callback)).pack(pady=5, side=tk.RIGHT)
         elif caller_id in modulos:
-            tb.Button(frame_opcoesBo, text="Excluir BO").pack(pady=5, padx=5, side=tk.RIGHT)
-            tb.Button(frame_opcoesBo, text="Editar BO").pack(pady=5, padx=5, side=tk.RIGHT)
+            tb.Button(frame_opcoesBo, text="Excluir BO", command=lambda: self.excluir(refresh_callback)).pack(pady=5, padx=5, side=tk.RIGHT)
+            tb.Button(frame_opcoesBo, text="Editar BO", command=lambda: self.abrir_editar_bo(refresh_callback)).pack(pady=5, padx=5, side=tk.RIGHT)
+
+    def excluir(self, refresh_callback):
+        excluir = excluir_bo(self)
+        self.root.wait_window(excluir)
+        if refresh_callback:
+            refresh_callback()
+        self.root.destroy()
+
+    def abrir_editar_bo(self, refresh_callback):
+        janela = editar_bo(self.root, self.tree, caller_id=self.ultimo_modulo, user=self.user)
+        self.root.wait_window(janela.root)
+        if refresh_callback:
+            refresh_callback()
+        self.root.destroy()

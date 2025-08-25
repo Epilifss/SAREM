@@ -69,9 +69,10 @@ class acompanhar_Bo:
         frame.pack(fill="x", padx=10, pady=10)
 
         labels = ["BO:", "OP:", "CLIENTE:", "EMISSÃO:"]
-        for i, texto in enumerate(labels):
-            tb.Label(frame, text=texto).grid(row=i, column=0, sticky="w")
-            tb.Label(frame, text=self.bo_dados[i]).grid(row=i, column=1, sticky="w")
+        if self.bo_dados:
+            for i, texto in enumerate(labels):
+                tb.Label(frame, text=texto).grid(row=i, column=0, sticky="w")
+                tb.Label(frame, text=self.bo_dados[i]).grid(row=i, column=1, sticky="w")
 
     def setores(self):
         from back.bo_service import obter_setores
@@ -107,8 +108,9 @@ class acompanhar_Bo:
         frame = tb.LabelFrame(parent_frame, text="Transporte", padding=10)
         frame.pack(fill="x", padx=10, pady=10)
 
-        tb.Label(frame, text="Previsão de entrega:").grid(row=0, column=0, sticky="w")
-        tb.Label(frame, text=self.bo_dados[5]).grid(row=0, column=1, sticky="w")
+        if self.bo_dados:
+            tb.Label(frame, text="Previsão de entrega:").grid(row=0, column=0, sticky="w")
+            tb.Label(frame, text=self.bo_dados[5]).grid(row=0, column=1, sticky="w")
 
         tb.Label(frame, text="Frete:").grid(row=1, column=0, sticky="w")
         cb_frete = tb.Combobox(frame, values=["CIF", "FOB"], state="readonly")
@@ -137,13 +139,14 @@ class acompanhar_Bo:
         # Campos de motivo
         self.entries_motivo_itens = []
         motivos = self.motivos()
-        for idx, (cod, desc, linha) in enumerate(self.itens_bo, start=1):
-            tb.Label(frame, text=cod).grid(row=idx, column=0, padx=5, pady=2)
-            tb.Label(frame, text=desc).grid(row=idx, column=1, padx=5, pady=2)
-            tb.Label(frame, text=linha).grid(row=idx, column=2, padx=5, pady=2)
-            cb = tb.Combobox(frame, values=motivos, width=25)
-            cb.grid(row=idx, column=3, padx=5, pady=2)
-            self.entries_motivo_itens.append(cb)
+        if self.itens_bo is not None and motivos is not None:
+            for idx, (cod, desc, linha) in enumerate(self.itens_bo, start=1):
+                tb.Label(frame, text=cod).grid(row=idx, column=0, padx=5, pady=2)
+                tb.Label(frame, text=desc).grid(row=idx, column=1, padx=5, pady=2)
+                tb.Label(frame, text=linha).grid(row=idx, column=2, padx=5, pady=2)
+                cb = tb.Combobox(frame, values=motivos, width=25)
+                cb.grid(row=idx, column=3, padx=5, pady=2)
+                self.entries_motivo_itens.append(cb)
 
     def botao_salvar(self, parent, refresh_callback):
         frame = tb.Frame(parent, padding=10)

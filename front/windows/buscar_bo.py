@@ -38,6 +38,8 @@ class BuscarBOView:
             on_double_click=partial(exibir_detalhes, self.root, caller_id=self.ultimo_modulo, user=self.user)
         )
 
+        self.treeview.frame.pack(expand=True, fill=tk.BOTH, pady=(5, 60))
+
         self.treeview.tree.bind("<Double-1>", lambda event: exibir_detalhes(self.root,
                        self.treeview.tree, caller_id=self.ultimo_modulo, user=self.user, refresh_callback=refresh_callback, buscar_call="buscarBO"))
 
@@ -68,12 +70,12 @@ class BuscarBOView:
                 self.treeview.tree.insert(
                     '', 'end',
                     values=(
-                        bo.bo,
-                        bo.op,
-                        bo.cliente,
-                        bo.empresa,
-                        bo.emissao,
-                        bo.previsao_entrega
+                        bo.bo, # type: ignore
+                        bo.op, # pyright: ignore[reportUnboundVariable] # type: ignore
+                        bo.cliente, # type: ignore
+                        bo.empresa, # type: ignore
+                        bo.emissao, # type: ignore
+                        bo.previsao_entrega # type: ignore
                     )
                 )
                 

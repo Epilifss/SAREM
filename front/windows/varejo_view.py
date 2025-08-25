@@ -34,7 +34,7 @@ class VarejoModule:
         self.treeview = listagemTreeview(
             self.root,
             columns=["BO", "OP", "STATUS", "TIPO DE OCORRÊNCIA", "SETOR RESPONSÁVEL", "CLIENTE"],
-            on_double_click=partial(exibir_detalhes, caller_id="Varejo", user=self.user)
+            on_double_click=partial(exibir_detalhes, caller_id="Varejo", user=self.user, refresh_callback=self.carregar_bos)
         )
         self.tree = self.treeview.tree
         self.header.tree = self.tree
@@ -46,28 +46,30 @@ class VarejoModule:
     def carregar_bos(self):
         bos = listar_bos("Varejo")
         self.tree.delete(*self.tree.get_children())
-        for bo in bos:
-            self.tree.insert(
-                '', 'end',
-                values=(
-                    bo.bo_number, bo.op, bo.status, bo.tipo_ocorrencia,
-                    bo.setor_responsavel, bo.loja
+        if bos:
+            for bo in bos:
+                self.tree.insert(
+                    '', 'end',
+                    values=(
+                        bo.bo_number, bo.op, bo.status, bo.tipo_ocorrencia,
+                        bo.setor_responsavel, bo.loja
+                    )
                 )
-            )
         estilizar_treeview(self.tree)
         ajustar_largura_colunas(self.tree)
 
     def pesquisar_bo(self, event=None):
         pesq = pesquisar_bo('Varejo', self.search_bar.search_entry.get())
         self.tree.delete(*self.tree.get_children())
-        for row in pesq:
-            self.tree.insert(
-                '', 'end',
-                values=(
-                    row[0], row[1], row[2], row[3],
-                    row[4], row[5]
+        if pesq:
+            for row in pesq:
+                self.tree.insert(
+                    '', 'end',
+                    values=(
+                        row[0], row[1], row[2], row[3],
+                        row[4], row[5]
+                    )
                 )
-            )
 
     def clear_search(self):
         self.search_bar.search_entry.delete(0, tk.END)

@@ -40,8 +40,8 @@ splash = mostrar_splash(root)
 root.update()
 
 # from funcoes import *
-from front.login_window import LoginWindow
-from back.utils import verificar_e_att
+from front.windows.login_window import LoginWindow
+from back.update_service import verificar_e_att
 from back.database import garantir_config_ini
 
 LOCKFILE = os.path.join(tempfile.gettempdir(), 'sarem_app.lock')

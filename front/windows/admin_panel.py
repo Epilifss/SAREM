@@ -79,9 +79,7 @@ class AdminPanel:
         EditarUsuarioModal(self.root, self, (item_id, *user_data))
 
     def logoff(self, parent=None):
-        from front.login_window import LoginWindow
-        from back.utils import monitorar_bo_event
-        monitorar_bo_event.set()
+        from front.windows.login_window import LoginWindow
         if parent is None:
             parent = self.root
         self.root.destroy()

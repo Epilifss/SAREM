@@ -21,7 +21,7 @@ class listagemTreeview:
         self.scrollbar = tb.Scrollbar(self.frame, orient=tk.VERTICAL)
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        self.tree = tb.Treeview(self.frame, columns=columns, show=show, yscrollcommand=self.scrollbar.set)
+        self.tree = tb.Treeview(self.frame, columns=columns, show=show, yscrollcommand=self.scrollbar.set) # type: ignore
         self.tree.pack(expand=True, fill=tk.BOTH)
 
         self.scrollbar.config(command=self.tree.yview)
