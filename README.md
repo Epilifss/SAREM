@@ -2,7 +2,7 @@ O SAREM é um sistema de desktop robusto projetado para o gerenciamento de Bolet
 
 Principais Funcionalidades:
 Autenticação de Usuário: O sistema possui uma tela de login para garantir que apenas usuários autorizados tenham acesso.
-Módulos de Visualização: A aplicação é dividida em módulos, como Corporativo e Loja, permitindo que diferentes perfis de usuários visualizem apenas as informações pertinentes ao seu setor.
+Módulos de Visualização: A aplicação é dividida em módulos, como Corporativo, Varejo e Exportação, permitindo que diferentes perfis de usuários visualizem apenas as informações pertinentes ao seu setor.
 Listagem e Pesquisa: Os usuários podem visualizar uma lista completa de BOs e realizar pesquisas rápidas para encontrar registros específicos.
 Visualização de Detalhes: É possível abrir uma janela modal para ver todos os detalhes de um BO específico.
 Edição de Registros: Usuários com as devidas permissões podem editar as informações de um Boletim de Ocorrência existente.
