@@ -39,10 +39,11 @@ class AdminPanel:
     def carregar_usuarios(self):
         self.tree.delete(*self.tree.get_children())
         usuarios = listar_usuarios()
-        for row in usuarios:
-            # row[0] é o id, não exibido, mas armazenado como 'iid' do item
-            valores_formatados = [str(item) for item in row[1:]]
-            self.tree.insert("", tk.END, iid=str(row[0]), values=valores_formatados)
+        if usuarios:
+            for row in usuarios:
+                # row[0] é o id, não exibido, mas armazenado como 'iid' do item
+                valores_formatados = [str(item) for item in row[1:]]
+                self.tree.insert("", tk.END, iid=str(row[0]), values=valores_formatados)
         estilizar_treeview(self.tree)
         ajustar_largura_colunas(self.tree)
 
@@ -57,13 +58,16 @@ class AdminPanel:
             self.usuario_selecionado = None
 
     def excluir_usuario(self):
-        if not hasattr(self, 'usuario_selecionado') or not self.usuario_selecionado:
+        selected_items = self.tree.selection()
+        user_id = selected_items[0]
+        user_name = self.tree.item(user_id, "values")[0] if user_id else None
+        if not user_id:
             messagebox.showerror("Erro", "Nenhum usuário selecionado")
             return
-        resposta = messagebox.askyesno("Confirmar", f"Tem certeza que deseja excluir o usuário {self.nome_usuario}?")
+        resposta = messagebox.askyesno("Confirmar", f"Tem certeza que deseja excluir o usuário {user_name}?")
         if not resposta:
             return
-        excluir_usuario(self.usuario_selecionado)
+        excluir_usuario(user_id)
         self.carregar_usuarios()
         self.usuario_selecionado = None
 
@@ -74,7 +78,9 @@ class AdminPanel:
                 "Atenção", "Selecione um usuário para editar.")
             return
 
+        print(f"Selected_items: {selected_items}")
         item_id = selected_items[0]
+        print(f"Item_id: {item_id}")
         user_data = self.tree.item(item_id, "values")
         EditarUsuarioModal(self.root, self, (item_id, *user_data))
 

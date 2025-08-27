@@ -4,6 +4,8 @@ from models.user import User
 
 def autenticar_usuario(username, password_hash):
     conn = create_connection()
+    if not conn:
+        return
     cursor = conn.cursor()
     cursor.execute(
         "SELECT id, username, module, is_admin FROM users WHERE username COLLATE Latin1_General_BIN=? AND password_hash COLLATE Latin1_General_BIN=?",
@@ -20,6 +22,8 @@ def autenticar_usuario(username, password_hash):
 
 def listar_usuarios():
     conn = create_connection()
+    if not conn:
+        return
     cursor = conn.cursor()
     cursor.execute("SELECT id, username, IIF(module='0','Corporativo',IIF(module='1','Varejo',IIF(module='2', 'Exportação', IIF(module='3', 'Comercial', '')))), IIF(is_admin='True', 'Sim', 'Não') FROM users")
     rows = cursor.fetchall()
@@ -30,6 +34,8 @@ def listar_usuarios():
 
 def excluir_usuario(user_id):
     conn = create_connection()
+    if not conn:
+        return
     cursor = conn.cursor()
     cursor.execute("DELETE FROM users WHERE id=?", (user_id,))
     conn.commit()
@@ -39,6 +45,8 @@ def excluir_usuario(user_id):
 
 def criar_usuario(username, password_hash, module, is_admin):
     conn = create_connection()
+    if not conn:
+        return
     cursor = conn.cursor()
     cursor.execute(
         "INSERT INTO users (username, password_hash, module, is_admin) VALUES (?, ?, ?, ?)",
@@ -51,6 +59,8 @@ def criar_usuario(username, password_hash, module, is_admin):
 
 def editar_usuario(user_id, username, password_hash, module, is_admin):
     conn = create_connection()
+    if not conn:
+        return
     cursor = conn.cursor()
     if password_hash:
         cursor.execute(

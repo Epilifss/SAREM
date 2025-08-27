@@ -40,3 +40,4 @@ instalador.iss
 msodbcsql.msi
 main.spec
 /installer/
+.vscode/settings.json
