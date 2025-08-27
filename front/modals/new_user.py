@@ -10,6 +10,7 @@ class NovoUsuarioModal:
             self.root = tk.Toplevel(parent)
             self.root.title("Novo Usuário")
             self.root.iconbitmap(resource_path('SAREM.ico'))
+            self.root.transient(parent)
             self.root.grab_set()
             self.root.focus_set()
 

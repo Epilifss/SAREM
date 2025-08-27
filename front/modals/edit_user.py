@@ -10,6 +10,7 @@ class EditarUsuarioModal:
         self.root = tk.Toplevel(parent)
         self.root.title("Editar Usuário")
         self.root.iconbitmap(resource_path('SAREM.ico'))
+        self.root.transient(parent)
         self.root.grab_set()
         self.root.focus_set()
         self.admin_panel = admin_panel
