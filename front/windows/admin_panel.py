@@ -4,8 +4,8 @@ from tkinter import messagebox
 
 from back.utils import resource_path
 from back.user_service import listar_usuarios, excluir_usuario, criar_usuario, editar_usuario
-from front.modals.new_user import NovoUsuarioModal
-from front.modals.edit_user import EditarUsuarioModal
+from front.modais.new_user import NovoUsuarioModal
+from front.modais.edit_user import EditarUsuarioModal
 from theme import ajustar_largura_colunas, estilizar_treeview
 
 class AdminPanel:

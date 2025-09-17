@@ -3,7 +3,7 @@ import ttkbootstrap as tb
 from functools import partial
 from back.utils import resource_path, center_window
 from back.bo_service import pesquisar_bo_protheus
-from front.modals.show_details import exibir_detalhes
+from front.modais.show_details import exibir_detalhes
 from front.components.searchbar import SearchBar
 from front.components.treeview import listagemTreeview
 from theme import estilizar_treeview, ajustar_largura_colunas
@@ -85,14 +85,15 @@ class BuscarBOView:
     def pesquisar_bo(self, event=None):
         pesq = pesquisar_bo_protheus(self.search_bar.search_entry.get())
         self.treeview.tree.delete(*self.treeview.tree.get_children())
-        for row in pesq:
-            self.treeview.tree.insert(
-                '', 'end',
-                values=(
-                    row[0], row[1], row[2], row[3],
-                    row[4], row[5]
+        if pesq:
+            for row in pesq:
+                self.treeview.tree.insert(
+                    '', 'end',
+                    values=(
+                        row[0], row[1], row[2], row[3],
+                        row[4], row[5]
+                    )
                 )
-            )
         estilizar_treeview(self.treeview.tree)
         ajustar_largura_colunas(self.treeview.tree)
 

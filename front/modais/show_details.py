@@ -1,8 +1,8 @@
 import tkinter as tk
 import ttkbootstrap as tb
 from back.utils import resource_path, center_window
-from front.modals.acompanharBO import acompanhar_Bo
-from front.modals.edit_bo import editar_bo
+from front.modais.acompanharBO import acompanhar_Bo
+from front.modais.edit_bo import editar_bo
 from back.bo_service import excluir_bo
 
 class exibir_detalhes():

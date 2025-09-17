@@ -1,7 +1,7 @@
 from back.database import create_connection, create_connection_Protheus
 from tkinter import messagebox
-from models.bo import BO
-from models.bo_protheus import BO_protheus
+from back.models.bo import BO
+from back.models.bo_protheus import BO_protheus
 import pyodbc
 import tkinter as tk
 

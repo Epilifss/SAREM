@@ -3,7 +3,7 @@ from back.utils import resource_path
 from front.components.header import Header
 from front.components.searchbar import SearchBar
 from front.components.treeview import listagemTreeview
-from front.modals.show_details import exibir_detalhes
+from front.modais.show_details import exibir_detalhes
 from functools import partial
 from theme import estilizar_treeview, ajustar_largura_colunas
 import tkinter as tk

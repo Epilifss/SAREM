@@ -11,7 +11,7 @@ from back.bo_monitor import monitorar_bo_embarcadas
 from back.user_service import autenticar_usuario
 from front.windows.admin_panel import AdminPanel
 from front.components.dialogs import DialogSenhaAdmin, chooseModuleDialog
-from front.modals.config_db import ConfigDBModal
+from front.modais.config_db import ConfigDBModal
 from front.windows.corporativo_view import CorporativoModule
 from front.windows.varejo_view import VarejoModule
 from front.windows.exportacao_view import ExportacaoModule
@@ -49,7 +49,7 @@ class LoginWindow:
         tb.Label(rodape_frame, text=f"Versão {VERSAO_ATUAL}").pack(side="right", padx=5)
 
         logo_img = Image.open(resource_path('SAREM PNG.png'))
-        logo_img = logo_img.resize((250, 80), Image.LANCZOS)
+        logo_img = logo_img.resize((250, 80), Image.Resampling.LANCZOS)
         self.logo_photo = ImageTk.PhotoImage(logo_img)
         tb.Label(campos_frame, image=self.logo_photo).pack(pady=(0, 10))
 

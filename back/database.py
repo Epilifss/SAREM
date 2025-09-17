@@ -2,6 +2,8 @@ import configparser
 import os
 import pyodbc
 import hashlib
+import urllib.parse
+from sqlalchemy import create_engine
 
 def garantir_config_ini():
     config_path = get_config_path()
@@ -160,6 +162,19 @@ def create_connection():
     except Exception as e:
         print(f"Erro ao conectar ao banco de dados: {e}")
         return None
+    
+def create_connection_alchemy():
+    db = get_db_config()
+    params = (
+        f"DRIVER={{{db['driver']}}};"
+        f"SERVER={db['server']};"
+        f"DATABASE={db['database']};"
+        f"UID={db['user']};"
+        f"PWD={db['password']};"
+    )
+    odbc_str = "mssql+pyodbc:///?odbc_connect=" + urllib.parse.quote_plus(params)
+    engine = create_engine(odbc_str, pool_pre_ping=True)
+    return engine
 
 def create_connection_Protheus():
     try:

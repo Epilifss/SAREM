@@ -30,9 +30,10 @@ class Header:
         self.parent.wait_window(janela.root)
 
     def abrir_estatisticas(self):
-        from funcoes import Estatisticas
-        janela = Estatisticas(self.parent, caller_id=self.ultimo_modulo)
-        self.parent.wait_window(janela.root)
+        from front.presenters.estatisticas_presenter import EstatisticasPresenter
+        presenter = EstatisticasPresenter(self.parent, caller_id=self.ultimo_modulo)
+        presenter.iniciar()
+        self.parent.wait_window(presenter.view.root)
 
     def abrir_relatorios(self):
         from front.windows.report import ReportView

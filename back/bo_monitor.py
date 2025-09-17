@@ -27,7 +27,7 @@ def monitorar_bo_embarcadas():
                     continue
 
                 cursor = conn.cursor()
-                cursor.execute("SELECT bo_number, op FROM bo_records WHERE status <> 'Embarcado'")
+                cursor.execute("SELECT bo_number, op FROM bo_records WHERE status <> 'Embarcado' AND D_E_L_E_T_ <> '*'")
                 bos = cursor.fetchall()
 
                 for bo_number, op in bos:

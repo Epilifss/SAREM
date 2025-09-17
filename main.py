@@ -10,6 +10,8 @@ from theme import temas
 root = tb.Window()
 temas()
 
+root.protocol("WM_DELETE_WINDOW", lambda: (root.destroy(), sys.exit(0)))
+
 root.overrideredirect(True)
 root.geometry('0x0+0+0')
 
@@ -26,13 +28,14 @@ def mostrar_splash(root):
         from PIL import Image, ImageTk
         from funcoes import resource_path
         img = Image.open(resource_path('SAREM PNG.png'))
-        img = img.resize((300, 100), Image.LANCZOS)
+        img = img.resize((300, 100), resample=Image.Resampling.LANCZOS)
         photo = ImageTk.PhotoImage(img)
         label_img = tk.Label(splash, image=photo, bg="white")
         label_img.image = photo
         label_img.pack(pady=(30, 10))
-    except Exception:
-        tk.Label(splash, text="SAREM", font=("Arial", 24), bg="white").pack(pady=(60, 10))
+    except Exception as e:
+        print(f"Erro ao exibir imagem:", e)
+        tk.Label(splash, text="SAREM", font=("Arial", 30), bg="white").pack(pady=(60, 10))
     tk.Label(splash, text="Powered by Epilifss", font=("Arial", 12), bg="white").pack()
     return splash
 
@@ -87,6 +90,5 @@ def iniciar_app(root):
         login_window = LoginWindow(root)
         root.after(100, login_window.root.focus_force)
         root.after(100, login_window.username.focus_force)
-        root.mainloop()
 
 root.mainloop()

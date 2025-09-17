@@ -1,5 +1,5 @@
 from back.database import create_connection
-from models.user import User
+from back.models.user import User
 
 
 def autenticar_usuario(username, password_hash):

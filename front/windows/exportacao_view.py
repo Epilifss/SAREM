@@ -3,13 +3,13 @@ from back.utils import resource_path
 from front.components.header import Header
 from front.components.searchbar import SearchBar
 from front.components.treeview import listagemTreeview
-from front.modals.show_details import exibir_detalhes
+from front.modais.show_details import exibir_detalhes
 from functools import partial
 from theme import estilizar_treeview, ajustar_largura_colunas
 import tkinter as tk
 
 class ExportacaoModule:
-    instance = None # Var de class que armazena a instância atual
+    instance = None
 
     def __init__(self, user, parent):
         self.user = user
@@ -17,7 +17,7 @@ class ExportacaoModule:
         self.root.title("SAREM - Módulo Exportação")
         self.root.state('zoomed')
 
-        self.root.iconbitmap(resource_path('SAREM.ico'))  # Define o ícone da janela
+        self.root.iconbitmap(resource_path('SAREM.ico'))
 
         self.root.protocol("WM_DELETE_WINDOW", parent.destroy)
 
