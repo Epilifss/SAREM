@@ -1,7 +1,7 @@
 import threading
 import time
 import datetime
-from tkinter import messagebox
+from plyer import notification
 from back.database import create_connection, create_connection_Protheus
 
 # Módulos
@@ -32,39 +32,57 @@ def monitorar_bo_embarcadas():
 
                 for bo_number, op in bos:
                     cursor_mik = conn_Protheus.cursor()
+                    
                     cursor_mik.execute("""
                         SELECT COUNT(*) FROM SC6010
-                        WHERE C6_NUM = ? AND C6_BLQ = '' AND D_E_L_E_T_ <> '*'
+                        WHERE C6_NUM = ?
+                        AND D_E_L_E_T_ <> '*'
+                        AND (C6_BLQ = 'R' OR C6_BLQ = '')
                     """, str(op))
-                    total_itens = cursor_mik.fetchone()[0]
+                    result = cursor_mik.fetchone()
+                    total_itens = result[0] if result is not None else 0
 
                     cursor_mik.execute("""
                         SELECT COUNT(*) FROM SC6010
-                        WHERE C6_NUM = ? AND C6_BLQ = '' AND D_E_L_E_T_ <> '*' AND C6_NOTA <> ''
+                        WHERE C6_NUM = ?
+                        AND D_E_L_E_T_ <> '*'
+                        AND (
+                            C6_BLQ = 'R'
+                            OR (C6_BLQ = '' AND C6_NOTA <> '')
+                        )
                     """, str(op))
-                    itens_com_nota = cursor_mik.fetchone()[0]
+                    result = cursor_mik.fetchone()
+                    itens_prontos = result[0] if result is not None else 0
+                    
                     cursor_mik.close()
 
-                    if total_itens > 0 and total_itens == itens_com_nota:
-                        cursor.execute("UPDATE bo_records SET status = 'Embarcado' WHERE bo_number = ?", bo_number)
+                    if total_itens > 0 and itens_prontos == total_itens:
+                        cursor.execute("UPDATE bo_records SET status = 'Embarcado' WHERE bo_number = ?", (bo_number,))
                         conn.commit()
-                        messagebox.showinfo("BO Liberada para Embarque", f"A {bo_number} foi liberada para embarque.")
+                        
+                        notification.notify(
+                            title='Alerta de Embarque',
+                            message=f'BO {bo_number} saiu para embarque',
+                            app_name='SAREM',
+                            timeout=10
+                        )
+
                         print(f"BO {bo_number} marcada como Embarcada.")
 
                         # Se precisar atualizar as interfaces, faça a importação condicional aqui
                         try:
                             if hasattr(CorporativoModule, "instance") and CorporativoModule.instance is not None:
-                                CorporativoModule.instance.atualizar_bos()
+                                CorporativoModule.instance.carregar_bos()
                         except Exception:
                             pass
                         try:
                             if hasattr(VarejoModule, "instance") and VarejoModule.instance is not None:
-                                VarejoModule.instance.atualizar_bos()
+                                VarejoModule.instance.carregar_bos()
                         except Exception:
                             pass
                         try:
                             if hasattr(ExportacaoModule, "instance") and ExportacaoModule.instance is not None:
-                                ExportacaoModule.instance.atualizar_bos()
+                                ExportacaoModule.instance.carregar_bos()
                         except Exception:
                             pass
 

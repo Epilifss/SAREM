@@ -1,6 +1,5 @@
 import tkinter as tk
 import ttkbootstrap as tb
-import webview
 import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -55,21 +54,20 @@ class EstatisticasView:
         for widget in self.content_frame.winfo_children():
             widget.destroy()
 
+        df = df.sort_values('Contagem', ascending=False)
+
         fig, ax = plt.subplots(figsize=(10, 6))
-        sns.barplot(data=df, x='Setor', y='Contagem', ax=ax)
+        sns.barplot(data=df, x='Contagem', y='Setor', ax=ax, palette='viridis')
 
-        ax.set_title(f"Contagem de BO's por setor ({ano})", fontsize=14)
-        ax.set_xlabel("Setor Responsável")
-        ax.set_ylabel("Número de BO's")
-        ax.tick_params(axis='x', rotation=0)
+        ax.set_title(f"Distribuição de BO's por setor em ({ano})", fontsize=14, weight='bold')
+        ax.set_xlabel("Número de BO's")
+        ax.set_ylabel("Setor Responsável")
+        ax.tick_params(axis='y', rotation=0)
+        
+        for container in ax.containers:
+            ax.bar_label(container, fmt='%d', label_type='edge', padding=3) # type: ignore
 
-        for i, row in df.iterrows():
-            ax.text(
-                i,
-                row['Contagem'] + 0.5,
-                str(row['Contagem']),
-                ha='center', va='bottom', fontsize=10
-            )
+        fig.subplots_adjust(left=0.3)
 
         canvas = FigureCanvasTkAgg(fig, master=self.content_frame)
         canvas.draw()
