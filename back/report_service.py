@@ -11,7 +11,7 @@ import sys
 import os
 import time
 
-def generate_report(modulo, cliente, setor, mes, status):
+def generate_report(modulo, cliente, setor, data_inicio, data_fim, status):
     conn = create_connection()
     if not conn:
         return []
@@ -25,9 +25,8 @@ def generate_report(modulo, cliente, setor, mes, status):
     if setor != "Todos":
         query += " AND setor_responsavel = ?"
         params.append(setor)
-    if mes != "Todos":
-        query += " AND MONTH(emissao_totvs) = ?"
-        params.append(int(mes))
+    query += " AND CAST(emissao_totvs AS DATE) BETWEEN ? AND ?"
+    params.extend([data_inicio, data_fim])
     if status != "Todos":
         query += " AND [status] = ?"
         params.append(status)
@@ -77,9 +76,6 @@ def get_all_status(ultimo_modulo):
             return ["Todos"] + [row[0] for row in cursor.fetchall()]
     finally:
         conn.close()
-
-def get_all_months():
-    return ["Todos"] + [str(i) for i in range(1, 13)]
 
 def export_to_pdf(data, headers, file_path):
     doc = SimpleDocTemplate(file_path, pagesize=landscape(A4))

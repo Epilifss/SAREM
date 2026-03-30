@@ -109,40 +109,38 @@ class LoginWindow:
             print(printUser + "painel de administração " + hora)
             AdminPanel(self.parent)
             self.root.destroy()
-        elif user.module == '0':
-            self.root.destroy()
-            print(printUser + "módulo Corporativo " + hora)
-            monitorar_bo_embarcadas()
-            CorporativoModule(user.username, self.parent)
-        elif user.module == '1':
-            self.root.destroy()
-            print(printUser + "módulo Varejo " + hora)
-            monitorar_bo_embarcadas()
-            VarejoModule(user.username, self.parent)
-        elif user.module == '2':
-            self.root.destroy()
-            print(printUser + "módulo Exportação " + hora)
-            monitorar_bo_embarcadas()
-            ExportacaoModule(user.username, self.parent)
-        elif user.module == '3':
-            dialog = chooseModuleDialog(self.root, printUser, hora, user)
-
-            chosen_module_type, chosen_print_user, chosen_hora = dialog.get_chosen_module()
-
-            if chosen_module_type:
-                self.root.destroy()
-
-                if chosen_module_type == 'Corporativo':
-                    print(f"{chosen_print_user}módulo Corporativo {chosen_hora}")
-                    monitorar_bo_embarcadas()
-                    CorporativoModule(user.username, self.parent)
-                elif chosen_module_type == 'Varejo':
-                    print(f"{chosen_print_user} módulo Varejo {chosen_hora}")
-                    monitorar_bo_embarcadas()
-                    VarejoModule(user.username, self.parent)
-                else:
-                    messagebox.showerror("Erro", "Módulo selecionado inválido. Contate o administrador.")
-                    return
         else:
-            messagebox.showerror("Erro", "Módulo do usuário não encontrado. Contate o administrador.")
-            return
+            allowed_modules = user.get_allowed_modules() if hasattr(user, "get_allowed_modules") else []
+            if not allowed_modules:
+                messagebox.showerror("Erro", "Módulo do usuário não encontrado. Contate o administrador.")
+                return
+
+            if len(allowed_modules) == 1:
+                chosen_module_type = allowed_modules[0]
+            else:
+                dialog = chooseModuleDialog(self.root, printUser, hora, user, allowed_modules=allowed_modules)
+                chosen_module_type, chosen_print_user, chosen_hora = dialog.get_chosen_module()
+
+                if not chosen_module_type:
+                    return
+                printUser = chosen_print_user
+                hora = chosen_hora
+
+            self.root.destroy()
+            self._open_module(chosen_module_type, user, printUser, hora)
+
+    def _open_module(self, chosen_module_type, user, printUser, hora):
+        if chosen_module_type == 'Corporativo':
+            print(f"{printUser}módulo Corporativo {hora}")
+            monitorar_bo_embarcadas()
+            CorporativoModule(user, self.parent)
+        elif chosen_module_type == 'Varejo':
+            print(f"{printUser} módulo Varejo {hora}")
+            monitorar_bo_embarcadas()
+            VarejoModule(user, self.parent)
+        elif chosen_module_type == 'Exportação':
+            print(f"{printUser} módulo Exportação {hora}")
+            monitorar_bo_embarcadas()
+            ExportacaoModule(user, self.parent)
+        else:
+            messagebox.showerror("Erro", "Módulo selecionado inválido. Contate o administrador.")

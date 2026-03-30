@@ -1,5 +1,5 @@
 from back.report_service import (
-    generate_report, get_all_clients, get_all_setores, get_all_months, get_all_status,
+    generate_report, get_all_clients, get_all_setores, get_all_status,
     export_to_pdf, export_to_excel, print_report
 )
 
@@ -13,10 +13,8 @@ class ReportPresenter:
             self.view.set_clients_options(clients)
             sectors = get_all_setores(ultimo_modulo=ultimo_modulo)
             self.view.set_sectors_options(sectors)
-            months = get_all_months()
             status_options = get_all_status(ultimo_modulo=ultimo_modulo)
             self.view.set_status_options(status_options)
-            self.view.set_months_options(months)
         except Exception as e:
             self.view.show_error(f"Erro ao inicializar filtros: {str(e)}")
 
@@ -25,9 +23,15 @@ class ReportPresenter:
             modulo = self.view.get_modulo()
             cliente = self.view.get_selected_client()
             setor = self.view.get_selected_sector()
-            mes = self.view.get_selected_month()
+            data_inicio = self.view.get_selected_start_date()
+            data_fim = self.view.get_selected_end_date()
             status = self.view.get_selected_status()
-            report_data = generate_report(modulo, cliente, setor, mes, status)
+
+            if data_inicio > data_fim:
+                self.view.show_error("A data inicial não pode ser maior que a data final.")
+                return
+
+            report_data = generate_report(modulo, cliente, setor, data_inicio, data_fim, status)
             self.view.display_report_data(report_data)
         except Exception as e:
             self.view.show_error(f"Erro ao gerar o relatório: {str(e)}")

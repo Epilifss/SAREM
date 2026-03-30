@@ -1,11 +1,19 @@
 import tkinter as tk
 import ttkbootstrap as tb
 from tkinter import messagebox
-from back.utils import resource_path, center_window
+from back.utils import resource_path, center_window, limitar_janela_tela, wraplength_responsivo
 
 class acompanhar_Bo:
     def __init__(self, parent, tree, caller_id=None, user=None, refresh_callback=None):
         self.user = user
+
+        if not self._can_track_bo():
+            messagebox.showerror("Permissão negada", "Você não possui permissão para acompanhar BO.")
+            self.root = tk.Toplevel(parent)
+            self.root.withdraw()
+            self.root.after(0, self.root.destroy)
+            return
+
         self.parent = parent
         self.ultimo_modulo = caller_id
         self.tree = tree
@@ -17,6 +25,7 @@ class acompanhar_Bo:
         self.root = tk.Toplevel(parent)
         self.root.title("Acompanhar BO")
         self.root.iconbitmap(resource_path('SAREM.ico'))
+        self.wraplength_valor = wraplength_responsivo(self.root, fraction=0.5)
         self.root.transient(parent)
         self.root.grab_set()
         self.root.focus_set()
@@ -50,12 +59,22 @@ class acompanhar_Bo:
         self.root.update_idletasks()
         ideal_width = scrollable_frame.winfo_reqwidth() + v_scroll.winfo_width() + 40
         self.root.geometry(f"{ideal_width}x600")
+        limitar_janela_tela(self.root)
         center_window(self.root)
 
         self.root.update_idletasks()
         center_window(self.root)
 
         print (f"Acompanhar BO chamada através do módulo {self.ultimo_modulo} por {self.user}")
+
+    def _can_track_bo(self):
+        if not self.user:
+            return False
+        if hasattr(self.user, "can_track"):
+            return self.user.can_track()
+        if hasattr(self.user, "is_admin"):
+            return bool(self.user.is_admin)
+        return True
 
     def obter_dados_bo(self):
         selecionado = self.tree.selection()
@@ -72,7 +91,7 @@ class acompanhar_Bo:
         if self.bo_dados:
             for i, texto in enumerate(labels):
                 tb.Label(frame, text=texto).grid(row=i, column=0, sticky="w")
-                tb.Label(frame, text=self.bo_dados[i]).grid(row=i, column=1, sticky="w")
+                tb.Label(frame, text=self.bo_dados[i], wraplength=self.wraplength_valor, justify="left", anchor="w").grid(row=i, column=1, sticky="w")
 
     def setores(self):
         from back.bo_service import obter_setores
@@ -110,7 +129,7 @@ class acompanhar_Bo:
 
         if self.bo_dados:
             tb.Label(frame, text="Previsão de entrega:").grid(row=0, column=0, sticky="w")
-            tb.Label(frame, text=self.bo_dados[5]).grid(row=0, column=1, sticky="w")
+            tb.Label(frame, text=self.bo_dados[5], wraplength=self.wraplength_valor, justify="left", anchor="w").grid(row=0, column=1, sticky="w")
 
         tb.Label(frame, text="Frete:").grid(row=1, column=0, sticky="w")
         cb_frete = tb.Combobox(frame, values=["CIF", "FOB"], state="readonly")
@@ -142,7 +161,7 @@ class acompanhar_Bo:
         if self.itens_bo is not None and motivos is not None:
             for idx, (cod, desc, linha) in enumerate(self.itens_bo, start=1):
                 tb.Label(frame, text=cod).grid(row=idx, column=0, padx=5, pady=2)
-                tb.Label(frame, text=desc).grid(row=idx, column=1, padx=5, pady=2)
+                tb.Label(frame, text=desc, wraplength=self.wraplength_valor, justify="left", anchor="w").grid(row=idx, column=1, padx=5, pady=2)
                 tb.Label(frame, text=linha).grid(row=idx, column=2, padx=5, pady=2)
                 cb = tb.Combobox(frame, values=motivos, width=25)
                 cb.grid(row=idx, column=3, padx=5, pady=2)

@@ -108,10 +108,28 @@ def ensure_tables_exist():
                     dt_embarque DATE,
                     modulo VARCHAR(50),
                     filial VARCHAR(15),
+                    user_edit VARCHAR(50) DEFAULT NULL,
+                    edited_at DATETIME DEFAULT NULL,
                     D_E_L_E_T_ CHAR(1) DEFAULT ' ',
                     user_delet VARCHAR(50) DEFAULT NULL,
                     deleted_at DATETIME DEFAULT NULL
                 )
+            """)
+
+            cursor.execute("""
+                IF COL_LENGTH('dbo.bo_records', 'user_edit') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.bo_records
+                    ADD user_edit VARCHAR(50) NULL
+                END
+            """)
+
+            cursor.execute("""
+                IF COL_LENGTH('dbo.bo_records', 'edited_at') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.bo_records
+                    ADD edited_at DATETIME NULL
+                END
             """)
 
             cursor.execute("""
@@ -123,6 +141,30 @@ def ensure_tables_exist():
                     module VARCHAR(50),
                     is_admin BIT DEFAULT 0
                 )
+            """)
+
+            cursor.execute("""
+                IF COL_LENGTH('dbo.users', 'can_edit_bo') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.users
+                    ADD can_edit_bo BIT NOT NULL CONSTRAINT DF_users_can_edit_bo DEFAULT 1
+                END
+            """)
+
+            cursor.execute("""
+                IF COL_LENGTH('dbo.users', 'can_delete_bo') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.users
+                    ADD can_delete_bo BIT NOT NULL CONSTRAINT DF_users_can_delete_bo DEFAULT 1
+                END
+            """)
+
+            cursor.execute("""
+                IF COL_LENGTH('dbo.users', 'can_track_bo') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.users
+                    ADD can_track_bo BIT NOT NULL CONSTRAINT DF_users_can_track_bo DEFAULT 1
+                END
             """)
 
             cursor.execute("""
@@ -140,8 +182,8 @@ def ensure_tables_exist():
             admin_password = hashlib.sha256("4dmin123@4".encode()).hexdigest()
             cursor.execute('''
                 IF NOT EXISTS (SELECT * FROM users WHERE username = 'TI')
-                INSERT INTO users (username, password_hash, is_admin)
-                VALUES (?, ?, 1)
+                INSERT INTO users (username, password_hash, is_admin, can_edit_bo, can_delete_bo, can_track_bo)
+                VALUES (?, ?, 1, 1, 1, 1)
             ''', ("TI", admin_password))
     except Exception as e:
         print(f"Erro ao garantir existência das tabelas: {e}")

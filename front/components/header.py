@@ -22,7 +22,24 @@ class Header:
         # tb.Button(header, text="Gerar Nova BO", command=self.abrir_gerar_bo).pack(side=tk.LEFT)
         tb.Button(header, text="Atualizar", command=lambda: refresh_callback() if refresh_callback else None).pack(side=tk.LEFT)
         tb.Button(header, text="Acompanhar uma BO", command=lambda: self.abrir_buscar_bo(refresh_callback)).pack(side=tk.LEFT)
+        if self._has_multiple_modules():
+            tb.Button(header, text="Trocar Módulo", command=self.trocar_modulo).pack(side=tk.RIGHT, padx=5)
         tb.Button(header, text="Logoff", command=self.logoff, style="custom.TButton").pack(side=tk.RIGHT, padx=5)
+
+    def _allowed_modules(self):
+        if hasattr(self.user, "get_allowed_modules"):
+            return self.user.get_allowed_modules()
+        return []
+
+    def _has_multiple_modules(self):
+        if hasattr(self.user, "has_multiple_modules"):
+            return self.user.has_multiple_modules()
+        return False
+
+    def _normalize_module_name(self, module_name):
+        if module_name == "Exportacao":
+            return "Exportação"
+        return module_name
 
     def abrir_embarcados(self):
         from funcoes import Embarcados
@@ -99,6 +116,36 @@ class Header:
         login = LoginWindow(root_principal)
         login.root.after(100, login.root.focus_force)
         login.root.after(100, login.username.focus_force)
+
+    def trocar_modulo(self):
+        from front.components.dialogs import chooseModuleDialog
+        from front.windows.corporativo_view import CorporativoModule
+        from front.windows.varejo_view import VarejoModule
+        from front.windows.exportacao_view import ExportacaoModule
+
+        allowed_modules = self._allowed_modules()
+        if len(allowed_modules) <= 1:
+            return
+
+        dialog = chooseModuleDialog(self.parent, "", "", self.user, allowed_modules=allowed_modules)
+        chosen_module_type, _, _ = dialog.get_chosen_module()
+
+        if not chosen_module_type:
+            return
+
+        current_module = self._normalize_module_name(self.ultimo_modulo)
+        if chosen_module_type == current_module:
+            return
+
+        root_principal = self.parent.master
+        self.parent.destroy()
+
+        if chosen_module_type == "Corporativo":
+            CorporativoModule(self.user, root_principal)
+        elif chosen_module_type == "Varejo":
+            VarejoModule(self.user, root_principal)
+        elif chosen_module_type == "Exportação":
+            ExportacaoModule(self.user, root_principal)
         
 
     def buscar_bo(self):

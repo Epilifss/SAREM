@@ -1,6 +1,7 @@
 import tkinter as tk
 import ttkbootstrap as tb
 from tkinter import messagebox, filedialog
+from datetime import datetime
 from back.utils import resource_path
 from front.components.treeview import listagemTreeview
 from front.presenters.report_presenter import ReportPresenter
@@ -40,14 +41,31 @@ class ReportView():
         self.setores_cbmx.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
         self.setores_cbmx.set("Todos")
 
-        # Mes
-        mes_frame = tb.Frame(frame_param)
-        mes_frame.pack(side=tk.LEFT, fill=tk.X, pady=5)
-        
-        tk.Label(mes_frame, text="Mês:").pack(side=tk.LEFT, padx=5)
-        self.meses_cbmx = tb.Combobox(mes_frame, state="readonly")
-        self.meses_cbmx.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
-        self.meses_cbmx.set("Todos")
+        # Periodo
+        periodo_frame = tb.Frame(frame_param)
+        periodo_frame.pack(side=tk.LEFT, fill=tk.X, pady=5)
+
+        hoje = datetime.today()
+        primeiro_dia_mes = hoje.replace(day=1)
+
+        tk.Label(periodo_frame, text="Período:").pack(side=tk.LEFT, padx=5)
+        tk.Label(periodo_frame, text="De").pack(side=tk.LEFT, padx=(5, 2))
+        self.data_inicio_entry = tb.DateEntry(
+            periodo_frame,
+            dateformat="%d/%m/%Y",
+            startdate=primeiro_dia_mes,
+            width=12,
+        )
+        self.data_inicio_entry.pack(side=tk.LEFT, padx=(0, 6))
+
+        tk.Label(periodo_frame, text="Até").pack(side=tk.LEFT, padx=(0, 2))
+        self.data_fim_entry = tb.DateEntry(
+            periodo_frame,
+            dateformat="%d/%m/%Y",
+            startdate=hoje,
+            width=12,
+        )
+        self.data_fim_entry.pack(side=tk.LEFT, padx=(0, 5))
 
         # Status
         status_frame = tb.Frame(frame_param)
@@ -104,8 +122,11 @@ class ReportView():
     def get_selected_sector(self):
         return self.setores_cbmx.get()
 
-    def get_selected_month(self):
-        return self.meses_cbmx.get()
+    def get_selected_start_date(self):
+        return self.data_inicio_entry.get_date().date()
+
+    def get_selected_end_date(self):
+        return self.data_fim_entry.get_date().date()
 
     def get_selected_status(self):
         return self.status_cbmx.get()
@@ -126,13 +147,6 @@ class ReportView():
             self.setores_cbmx.set("Todos")
         elif options:
             self.setores_cbmx.set(options[0])
-
-    def set_months_options(self, options):
-        self.meses_cbmx['values'] = options
-        if "Todos" in options:
-            self.meses_cbmx.set("Todos")
-        elif options:
-            self.meses_cbmx.set(options[0])
 
     def set_status_options(self, options):
         self.status_cbmx['values'] = options

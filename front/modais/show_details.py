@@ -1,6 +1,7 @@
 import tkinter as tk
 import ttkbootstrap as tb
-from back.utils import resource_path, center_window
+from tkinter import messagebox
+from back.utils import resource_path, center_window, limitar_janela_tela, wraplength_responsivo
 from front.modais.acompanharBO import acompanhar_Bo
 from front.modais.edit_bo import editar_bo
 from back.bo_service import excluir_bo
@@ -13,6 +14,7 @@ class exibir_detalhes():
         self.root = tk.Toplevel(parent)
         self.root.title("Detalhes BO")
         self.root.iconbitmap(resource_path('SAREM.ico'))
+        self.wraplength_valor = wraplength_responsivo(self.root, fraction=0.5)
         self.root.minsize(400, 300)
         self.root.resizable(False, False)
         self.root.focus_set()
@@ -43,7 +45,9 @@ class exibir_detalhes():
                 aviso_frame,
                 text="⚠️ Esta BO já está sendo acompanhada!",
                 foreground="red",
-                font=("Arial", 10, "bold")
+                font=("Arial", 10, "bold"),
+                wraplength=self.wraplength_valor,
+                justify="left"
             )
             aviso_label.pack(fill="x")
 
@@ -60,7 +64,35 @@ class exibir_detalhes():
             self.opcoes_bo(row=detalhe_row + 2, caller_id=caller_id, refresh_callback=refresh_callback, buscar_call=buscar_call)
 
         self.root.update_idletasks()
+        limitar_janela_tela(self.root)
         center_window(self.root)
+
+    def _can_edit_bo(self):
+        if not self.user:
+            return False
+        if hasattr(self.user, "can_edit"):
+            return self.user.can_edit()
+        if hasattr(self.user, "is_admin"):
+            return bool(self.user.is_admin)
+        return True
+
+    def _can_delete_bo(self):
+        if not self.user:
+            return False
+        if hasattr(self.user, "can_delete"):
+            return self.user.can_delete()
+        if hasattr(self.user, "is_admin"):
+            return bool(self.user.is_admin)
+        return True
+
+    def _can_track_bo(self):
+        if not self.user:
+            return False
+        if hasattr(self.user, "can_track"):
+            return self.user.can_track()
+        if hasattr(self.user, "is_admin"):
+            return bool(self.user.is_admin)
+        return True
 
     def detalhes_ocorrencia(self, row=0, buscar_call=None, caller_id=None):
         self.root.grid_rowconfigure(row, weight=3)
@@ -89,7 +121,7 @@ class exibir_detalhes():
             for i, label_text in enumerate(labels if buscar_call == "buscarBO" else labels2):
                 tb.Label(frame_sc5Detalhes, text=label_text).grid(
                     row=i, column=0, sticky="w", padx=5, pady=2)
-                tb.Label(frame_sc5Detalhes, text=valores[i]).grid(
+                tb.Label(frame_sc5Detalhes, text=valores[i], wraplength=self.wraplength_valor, justify="left").grid(
                     row=i, column=1, sticky="ew", padx=5, pady=2)
         elif caller_id in modulos:
             from back.bo_service import buscar_dados_bo
@@ -98,7 +130,7 @@ class exibir_detalhes():
                 for i, label_text in enumerate(labels2):
                     tb.Label(frame_sc5Detalhes, text=label_text).grid(
                         row=i, column=0, sticky="w", padx=5, pady=2)
-                    tb.Label(frame_sc5Detalhes, text=bo_dados[i]).grid(
+                    tb.Label(frame_sc5Detalhes, text=bo_dados[i], wraplength=self.wraplength_valor, justify="left", anchor="w").grid(
                         row=i, column=1, sticky="ew", padx=5, pady=2)
 
         self.root.update_idletasks()
@@ -140,7 +172,8 @@ class exibir_detalhes():
         if itens_bo is not None:
             for idx, item in enumerate(itens_bo):
                 for col, value in enumerate(item):
-                    label = tb.Label(frame_itensBo, text=value)
+                    wrap = self.wraplength_valor if col == 1 else 0
+                    label = tb.Label(frame_itensBo, text=value, wraplength=wrap, justify="left", anchor="w")
                     label.grid(row=idx + 1, column=col, sticky="w", padx=5, pady=2)
                     frame_itensBo.grid_columnconfigure(col, weight=1)
 
@@ -161,12 +194,29 @@ class exibir_detalhes():
         modulos = ["Corporativo", "Varejo", "Exportacao"]
 
         if buscar_call == "buscarBO":
-            tb.Button(frame_opcoesBo, text="Acompanhar BO", command=lambda: acompanhar_Bo(self.root, self.tree, caller_id=self.ultimo_modulo, user=self.user, refresh_callback=refresh_callback)).pack(pady=5, side=tk.RIGHT)
+            if self._can_track_bo():
+                tb.Button(frame_opcoesBo, text="Acompanhar BO", command=lambda: acompanhar_Bo(self.root, self.tree, caller_id=self.ultimo_modulo, user=self.user, refresh_callback=refresh_callback)).pack(pady=5, side=tk.RIGHT)
+            else:
+                tb.Label(frame_opcoesBo, text="Você não possui permissão para acompanhar BO.", wraplength=self.wraplength_valor, justify="left").pack(pady=5, side=tk.LEFT)
         elif caller_id in modulos:
-            tb.Button(frame_opcoesBo, text="Excluir BO", command=lambda: self.excluir(refresh_callback)).pack(pady=5, padx=5, side=tk.RIGHT)
-            tb.Button(frame_opcoesBo, text="Editar BO", command=lambda: self.abrir_editar_bo(refresh_callback)).pack(pady=5, padx=5, side=tk.RIGHT)
+            possui_alguma_permissao = False
+
+            if self._can_delete_bo():
+                tb.Button(frame_opcoesBo, text="Excluir BO", command=lambda: self.excluir(refresh_callback)).pack(pady=5, padx=5, side=tk.RIGHT)
+                possui_alguma_permissao = True
+
+            if self._can_edit_bo():
+                tb.Button(frame_opcoesBo, text="Editar BO", command=lambda: self.abrir_editar_bo(refresh_callback)).pack(pady=5, padx=5, side=tk.RIGHT)
+                possui_alguma_permissao = True
+
+            if not possui_alguma_permissao:
+                tb.Label(frame_opcoesBo, text="Você não possui permissão para editar ou excluir BO.", wraplength=self.wraplength_valor, justify="left").pack(pady=5, side=tk.LEFT)
 
     def excluir(self, refresh_callback):
+        if not self._can_delete_bo():
+            messagebox.showerror("Permissão negada", "Você não possui permissão para excluir BO.")
+            return
+
         excluir = excluir_bo(self)
         self.root.wait_window(excluir)
         if refresh_callback:
@@ -174,6 +224,10 @@ class exibir_detalhes():
         self.root.destroy()
 
     def abrir_editar_bo(self, refresh_callback):
+        if not self._can_edit_bo():
+            messagebox.showerror("Permissão negada", "Você não possui permissão para editar BO.")
+            return
+
         janela = editar_bo(self.root, self.tree, caller_id=self.ultimo_modulo, user=self.user)
         self.root.wait_window(janela.root)
         if refresh_callback:

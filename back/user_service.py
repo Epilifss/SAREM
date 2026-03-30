@@ -8,7 +8,7 @@ def autenticar_usuario(username, password_hash):
         return
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, username, module, is_admin FROM users WHERE username COLLATE Latin1_General_BIN=? AND password_hash COLLATE Latin1_General_BIN=?",
+        "SELECT id, username, module, is_admin, can_edit_bo, can_delete_bo, can_track_bo FROM users WHERE username COLLATE Latin1_General_BIN=? AND password_hash COLLATE Latin1_General_BIN=?",
         (username, password_hash)
     )
     row = cursor.fetchone()
@@ -25,7 +25,17 @@ def listar_usuarios():
     if not conn:
         return
     cursor = conn.cursor()
-    cursor.execute("SELECT id, username, IIF(module='0','Corporativo',IIF(module='1','Varejo',IIF(module='2', 'Exportação', IIF(module='3', 'Comercial', '')))), IIF(is_admin='True', 'Sim', 'Não') FROM users")
+    cursor.execute("""
+        SELECT
+            id,
+            username,
+            IIF(module='0','Corporativo',IIF(module='1','Varejo',IIF(module='2', 'Exportação', IIF(module='3', 'Comercial', IIF(module='4', 'Todos', ''))))),
+            IIF(is_admin = 1, 'Sim', 'Não'),
+            IIF(can_edit_bo = 1, 'Sim', 'Não'),
+            IIF(can_delete_bo = 1, 'Sim', 'Não'),
+            IIF(can_track_bo = 1, 'Sim', 'Não')
+        FROM users
+    """)
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -43,34 +53,34 @@ def excluir_usuario(user_id):
     conn.close()
 
 
-def criar_usuario(username, password_hash, module, is_admin):
+def criar_usuario(username, password_hash, module, is_admin, can_edit_bo, can_delete_bo, can_track_bo):
     conn = create_connection()
     if not conn:
         return
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO users (username, password_hash, module, is_admin) VALUES (?, ?, ?, ?)",
-        (username, password_hash, module, is_admin)
+        "INSERT INTO users (username, password_hash, module, is_admin, can_edit_bo, can_delete_bo, can_track_bo) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (username, password_hash, module, is_admin, can_edit_bo, can_delete_bo, can_track_bo)
     )
     conn.commit()
     cursor.close()
     conn.close()
 
 
-def editar_usuario(user_id, username, password_hash, module, is_admin):
+def editar_usuario(user_id, username, password_hash, module, is_admin, can_edit_bo, can_delete_bo, can_track_bo):
     conn = create_connection()
     if not conn:
         return
     cursor = conn.cursor()
     if password_hash:
         cursor.execute(
-            "UPDATE users SET username=?, password_hash=?, module=?, is_admin=? WHERE id=?",
-            (username, password_hash, module, is_admin, user_id)
+            "UPDATE users SET username=?, password_hash=?, module=?, is_admin=?, can_edit_bo=?, can_delete_bo=?, can_track_bo=? WHERE id=?",
+            (username, password_hash, module, is_admin, can_edit_bo, can_delete_bo, can_track_bo, user_id)
         )
     else:
         cursor.execute(
-            "UPDATE users SET username=?, module=?, is_admin=? WHERE id=?",
-            (username, module, is_admin, user_id)
+            "UPDATE users SET username=?, module=?, is_admin=?, can_edit_bo=?, can_delete_bo=?, can_track_bo=? WHERE id=?",
+            (username, module, is_admin, can_edit_bo, can_delete_bo, can_track_bo, user_id)
         )
     conn.commit()
     cursor.close()

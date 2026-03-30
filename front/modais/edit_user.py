@@ -2,7 +2,7 @@ import tkinter as tk
 import ttkbootstrap as tb
 import hashlib
 from tkinter import messagebox
-from back.utils import resource_path
+from back.utils import resource_path, limitar_janela_tela
 from back.user_service import editar_usuario
 
 class EditarUsuarioModal:
@@ -16,7 +16,7 @@ class EditarUsuarioModal:
         self.admin_panel = admin_panel
         self.user_data = user_data
 
-        campos = ["Usuário", "Senha", "Módulo", "Admin"]
+        campos = ["Usuário", "Senha", "Módulo", "Perfil", "Admin", "Pode Editar BO", "Pode Excluir BO", "Pode Acompanhar BO"]
         self.entries = {}
 
         content = tb.Frame(self.root, padding=20)
@@ -31,20 +31,37 @@ class EditarUsuarioModal:
             row=i, column=0, sticky=tk.W, padx=10, pady=8
             )
 
-            if campo == "Admin":
+            if campo == "Perfil":
+                entry = tb.Combobox(content, values=["Somente Leitura", "Operador", "Supervisor", "Administrador"], state="readonly")
+                entry.set("Operador")
+            elif campo == "Admin":
                 entry = tb.Combobox(content, values=["Sim", "Não"], state="readonly")
                 entry.set(self.user_data[3])
+            elif campo == "Pode Editar BO":
+                entry = tb.Combobox(content, values=["Sim", "Não"], state="readonly")
+                entry.set(self.user_data[4])
+            elif campo == "Pode Excluir BO":
+                entry = tb.Combobox(content, values=["Sim", "Não"], state="readonly")
+                entry.set(self.user_data[5])
+            elif campo == "Pode Acompanhar BO":
+                entry = tb.Combobox(content, values=["Sim", "Não"], state="readonly")
+                entry.set(self.user_data[6])
             elif campo == "Senha":
                 entry = tb.Entry(content, show="*")
             elif campo == "Módulo":
                 entry = tb.Combobox(content, values=[
-                    "Corporativo", "Varejo", "Exportação", "Comercial"], state="readonly")
+                    "Corporativo", "Varejo", "Exportação", "Comercial", "Todos"], state="readonly")
                 entry.set(self.user_data[2])
             elif campo == "Usuário":
                 entry = tb.Entry(content)
                 entry.insert(0, self.user_data[1])
             entry.grid(row=i, column=1, padx=10, pady=8)
             self.entries[campo] = entry
+
+        self.entries["Perfil"].bind("<<ComboboxSelected>>", self.aplicar_perfil)
+        self.entries["Admin"].bind("<<ComboboxSelected>>", self.on_admin_change)
+
+        self.definir_perfil_inicial()
 
         tb.Button(content, text="Salvar", command=self.salvar).grid(
             row=len(campos), column=0, columnspan=2, pady=(15, 0)
@@ -56,6 +73,7 @@ class EditarUsuarioModal:
         x = (self.root.winfo_screenwidth() // 2) - (width // 2)
         y = (self.root.winfo_screenheight() // 2) - (height // 2)
         self.root.geometry(f"{width}x{height}+{x}+{y}")
+        limitar_janela_tela(self.root)
 
     def salvar(self):
         username = self.entries["Usuário"].get()
@@ -63,12 +81,61 @@ class EditarUsuarioModal:
         hashed_pw = hashlib.sha256(password.encode()).hexdigest() if password else None
         module = self.entries["Módulo"].get()
         is_admin = 1 if self.entries["Admin"].get() == "Sim" else 0
-        module = 0 if module == "Corporativo" else 1 if module == "Varejo" else 2 if module == "Exportação" else 3 if module == "Comercial" else 4
+        can_edit_bo = 1 if self.entries["Pode Editar BO"].get() == "Sim" else 0
+        can_delete_bo = 1 if self.entries["Pode Excluir BO"].get() == "Sim" else 0
+        can_track_bo = 1 if self.entries["Pode Acompanhar BO"].get() == "Sim" else 0
+
+        if is_admin:
+            can_edit_bo = 1
+            can_delete_bo = 1
+            can_track_bo = 1
+
+        module = 0 if module == "Corporativo" else 1 if module == "Varejo" else 2 if module == "Exportação" else 3 if module == "Comercial" else 4 if module == "Todos" else 0
 
         try:
-            editar_usuario(self.user_data[0], username, hashed_pw, module, is_admin)
+            editar_usuario(self.user_data[0], username, hashed_pw, module, is_admin, can_edit_bo, can_delete_bo, can_track_bo)
             messagebox.showinfo("Sucesso", "Usuário editado com sucesso!")
             self.admin_panel.carregar_usuarios()
             self.root.destroy()
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao editar usuário: {e}")
+
+    def aplicar_perfil(self, event=None):
+        perfil = self.entries["Perfil"].get()
+        presets = {
+            "Somente Leitura": ("Não", "Não", "Não", "Não"),
+            "Operador": ("Não", "Não", "Não", "Sim"),
+            "Supervisor": ("Não", "Sim", "Sim", "Sim"),
+            "Administrador": ("Sim", "Sim", "Sim", "Sim"),
+        }
+        admin, editar, excluir, acompanhar = presets.get(perfil, presets["Operador"])
+        self.entries["Admin"].set(admin)
+        self.entries["Pode Editar BO"].set(editar)
+        self.entries["Pode Excluir BO"].set(excluir)
+        self.entries["Pode Acompanhar BO"].set(acompanhar)
+
+    def on_admin_change(self, event=None):
+        if self.entries["Admin"].get() == "Sim":
+            self.entries["Perfil"].set("Administrador")
+            self.entries["Pode Editar BO"].set("Sim")
+            self.entries["Pode Excluir BO"].set("Sim")
+            self.entries["Pode Acompanhar BO"].set("Sim")
+
+    def definir_perfil_inicial(self):
+        admin = self.entries["Admin"].get() == "Sim"
+        editar = self.entries["Pode Editar BO"].get() == "Sim"
+        excluir = self.entries["Pode Excluir BO"].get() == "Sim"
+        acompanhar = self.entries["Pode Acompanhar BO"].get() == "Sim"
+
+        if admin and editar and excluir and acompanhar:
+            perfil = "Administrador"
+        elif (not admin) and editar and excluir and acompanhar:
+            perfil = "Supervisor"
+        elif (not admin) and (not editar) and (not excluir) and acompanhar:
+            perfil = "Operador"
+        elif (not admin) and (not editar) and (not excluir) and (not acompanhar):
+            perfil = "Somente Leitura"
+        else:
+            perfil = "Operador"
+
+        self.entries["Perfil"].set(perfil)

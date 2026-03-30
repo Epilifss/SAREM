@@ -1,0 +1,1 @@
+from front.windows.shipments_view import ShipmentsView

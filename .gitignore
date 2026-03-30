@@ -41,3 +41,4 @@ msodbcsql.msi
 main.spec
 /installer/
 .vscode/settings.json
+web/

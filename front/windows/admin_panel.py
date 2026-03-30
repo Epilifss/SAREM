@@ -28,8 +28,8 @@ class AdminPanel:
         tb.Button(header, text="Editar Usuário", command=self.editar_usuario).pack(side=tk.LEFT)
         tb.Button(header, text="Logoff", command=self.logoff).pack(side=tk.RIGHT)
 
-        self.tree = tb.Treeview(self.user_frame, columns=("Usuário", "Módulo", "Admin"), show="headings")
-        for col in ("Usuário", "Módulo", "Admin"):
+        self.tree = tb.Treeview(self.user_frame, columns=("Usuário", "Módulo", "Admin", "Pode Editar BO", "Pode Excluir BO", "Pode Acompanhar BO"), show="headings")
+        for col in ("Usuário", "Módulo", "Admin", "Pode Editar BO", "Pode Excluir BO", "Pode Acompanhar BO"):
             self.tree.heading(col, text=col)
         self.tree.pack(expand=True, fill=tk.BOTH)
         self.tree.bind("<<TreeviewSelect>>", self.atualizar_selecao)

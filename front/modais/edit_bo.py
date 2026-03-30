@@ -1,6 +1,7 @@
 import tkinter as tk
 import ttkbootstrap as tb
-from back.utils import resource_path, center_window, ajustar_tamanho_janela
+from tkinter import messagebox
+from back.utils import resource_path, center_window, ajustar_tamanho_janela, limitar_janela_tela, wraplength_responsivo
 from back.bo_service import obter_detalhes_ocorrencia, listar_itens_SAREM, obter_motivos, atualizar_bo
 
 class editar_bo():
@@ -9,9 +10,17 @@ class editar_bo():
         self.tree = tree
         self.ultimo_modulo = caller_id
 
+        if not self._can_edit_bo():
+            messagebox.showerror("Permissão negada", "Você não possui permissão para editar BO.")
+            self.root = tk.Toplevel(parent)
+            self.root.withdraw()
+            self.root.after(0, self.root.destroy)
+            return
+
         self.root = tk.Toplevel(parent)
         self.root.title("Editar BO")
         self.root.iconbitmap(resource_path('SAREM.ico'))
+        self.wraplength_valor = wraplength_responsivo(self.root, fraction=0.5)
         self.root.minsize(400, 300)
         self.root.resizable(False, False)
         self.root.focus_set()
@@ -55,7 +64,17 @@ class editar_bo():
         self.root.update_idletasks()
         ideal_width = scrollable_frame.winfo_reqwidth() + v_scroll.winfo_width() + 40
         ajustar_tamanho_janela(self.root, ideal_width, 600)
+        limitar_janela_tela(self.root)
         center_window(self.root)
+
+    def _can_edit_bo(self):
+        if not self.user:
+            return False
+        if hasattr(self.user, "can_edit"):
+            return self.user.can_edit()
+        if hasattr(self.user, "is_admin"):
+            return bool(self.user.is_admin)
+        return True
 
     def detalhes_ocorrencia(self, valores, parent_frame):
         parent_frame.grid_rowconfigure(0, weight=3)
@@ -84,7 +103,7 @@ class editar_bo():
             for i, label_text in enumerate(labels):
                 tb.Label(frame_detalhes_ocorrencia, text=label_text).grid(
                     row=i, column=0, sticky="w", padx=5, pady=2)
-                tb.Label(frame_detalhes_ocorrencia, text=itens_bo[0][i]).grid(
+                tb.Label(frame_detalhes_ocorrencia, text=itens_bo[0][i], wraplength=self.wraplength_valor, justify="left", anchor="w").grid(
                     row=i, column=1, sticky="ew", padx=5, pady=2)
 
         self.root.update_idletasks()
@@ -179,7 +198,7 @@ class editar_bo():
         if motivos_opcoes and itens_bo:
             for idx, (cod, desc, linha, motivo) in enumerate(itens_bo):
                 tb.Label(frame_itensBo, text=cod).grid(row=idx+1, column=0, padx=5, pady=2)
-                tb.Label(frame_itensBo, text=desc).grid(row=idx+1, column=1, padx=5, pady=2)
+                tb.Label(frame_itensBo, text=desc, wraplength=self.wraplength_valor, justify="left", anchor="w").grid(row=idx+1, column=1, padx=5, pady=2)
                 tb.Label(frame_itensBo, text=linha).grid(row=idx+1, column=2, padx=5, pady=2)
                 entry_motivo = tb.Combobox(frame_itensBo, values=motivos_opcoes, width=25)
                 entry_motivo.set(motivo if motivo else "")
@@ -206,7 +225,7 @@ class editar_bo():
             (entry_motivo.get(), self.bo_number, cod) for cod, entry_motivo in self.entries_motivo_itens
         ]
 
-        atualizar_bo(self.bo_number, dados_bo, dados_itens)
+        atualizar_bo(self.bo_number, dados_bo, dados_itens, self.user)
         self.root.destroy()
 
     def cancelar(self):

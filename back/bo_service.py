@@ -5,6 +5,32 @@ from back.models.bo_protheus import BO_protheus
 import pyodbc
 import tkinter as tk
 
+
+def _get_username(user):
+    if hasattr(user, "username"):
+        return user.username
+    return str(user) if user is not None else ""
+
+
+def _can_delete_bo(user):
+    if user is None:
+        return False
+    if hasattr(user, "can_delete"):
+        return user.can_delete()
+    if hasattr(user, "is_admin"):
+        return bool(user.is_admin)
+    return True
+
+
+def _can_track_bo(user):
+    if user is None:
+        return False
+    if hasattr(user, "can_track"):
+        return user.can_track()
+    if hasattr(user, "is_admin"):
+        return bool(user.is_admin)
+    return True
+
 def listar_bos(modulo):
     conn = create_connection()
     if conn is None:
@@ -76,53 +102,61 @@ def pesquisar_bo_protheus(termo):
     return rows
 
 def excluir_bo(self, refresh_callback=None):
-        conn = None
-        cursor = None
-        
-        item_selecionado = self.tree.selection()
-        if not item_selecionado:
-            messagebox.showwarning("Aviso", "Nenhum item selecionado.")
-            return
-        
-        valores = self.tree.item(item_selecionado, "values")
-        bo_number = valores[0]
+    conn = None
+    cursor = None
 
-        print(f"Usuário {self.user} solicitou a exclusão da {bo_number}.")
+    if not _can_delete_bo(self.user):
+        messagebox.showerror("Permissão negada", "Você não possui permissão para excluir BO.")
+        return
 
-        resposta = messagebox.askyesno("Confirmação",
-            "Você tem certeza que deseja excluir esta BO? Esta ação não pode ser desfeita.",
-            icon=messagebox.WARNING
-        )
+    item_selecionado = self.tree.selection()
+    if not item_selecionado:
+        messagebox.showwarning("Aviso", "Nenhum item selecionado.")
+        return
 
-        if resposta is True:
-            try:
-                conn = create_connection()
-                if conn is None:
-                    return None
-                cursor = conn.cursor()
-                cursor.execute("""
+    valores = self.tree.item(item_selecionado, "values")
+    bo_number = valores[0]
+
+    username = _get_username(self.user)
+
+    print(f"Usuário {username} solicitou a exclusão da {bo_number}.")
+
+    resposta = messagebox.askyesno(
+        "Confirmação",
+        "Você tem certeza que deseja excluir esta BO? Esta ação não pode ser desfeita.",
+        icon=messagebox.WARNING
+    )
+
+    if resposta is True:
+        try:
+            conn = create_connection()
+            if conn is None:
+                return None
+            cursor = conn.cursor()
+            cursor.execute(
+                """
                     UPDATE bo_records
                     SET D_E_L_E_T_ = '*', user_delet = ?, deleted_at = GETDATE()
                     WHERE bo_number = ?
-                """, (self.user), str(bo_number,))
-                conn.commit()
-                messagebox.showinfo("Sucesso", f"{bo_number} excluída com sucesso!")
-                if refresh_callback:
-                    refresh_callback()
-                print(f"{self.user} excluiu a {bo_number}.")
-                self.root.destroy()
-            except pyodbc.Error as e:
-                messagebox.showerror("Erro", f"Erro ao excluir BO: {e}")
-                self.root.destroy()
-            finally:
-                if cursor:
-                    cursor.close()
-                if conn:
-                    conn.close()
-
-        else:
-            print(f"{self.user} não excluiu a {bo_number}.")
-            pass
+                """,
+                (username, str(bo_number))
+            )
+            conn.commit()
+            messagebox.showinfo("Sucesso", f"{bo_number} excluída com sucesso!")
+            if refresh_callback:
+                refresh_callback()
+            print(f"{username} excluiu a {bo_number}.")
+            self.root.destroy()
+        except pyodbc.Error as e:
+            messagebox.showerror("Erro", f"Erro ao excluir BO: {e}")
+            self.root.destroy()
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+    else:
+        print(f"{username} não excluiu a {bo_number}.")
 
 def verificar_bo_acompanhada(bo_number):
     conn = create_connection()
@@ -227,6 +261,9 @@ def salvar_bo(bo_dados, ocorrencia_data, transporte_data, user_data, itens_com_m
     conn = None 
     cursor = None
     try:
+        if not _can_track_bo(user_data):
+            raise PermissionError("Você não possui permissão para acompanhar BO.")
+
         conn = create_connection()
         if conn is None:
             return None
@@ -245,6 +282,8 @@ def salvar_bo(bo_dados, ocorrencia_data, transporte_data, user_data, itens_com_m
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         
+        username = _get_username(user_data)
+
         insert_bo_records_values = (
             bo_dados[0], # bo_number
             bo_dados[1], # op
@@ -258,7 +297,7 @@ def salvar_bo(bo_dados, ocorrencia_data, transporte_data, user_data, itens_com_m
             bo_dados[5], # previsao_embarque
             ultimo_modulo,
             'Em Andamento', # status
-            user_data # user_include
+            username # user_include
         )
         
         cursor.execute(insert_bo_records_query, insert_bo_records_values)
@@ -290,25 +329,29 @@ def salvar_bo(bo_dados, ocorrencia_data, transporte_data, user_data, itens_com_m
         if conn:
             conn.close()
 
-def atualizar_bo(bo_number, dados_bo, dados_itens):
+def atualizar_bo(bo_number, dados_bo, dados_itens, user_data):
     conn = create_connection()
     if conn is None:
         return None
     cursor = conn.cursor()
+
+    username = _get_username(user_data)
 
     update_query = """
                 UPDATE bo_records
                 SET tipo_ocorrencia = ?,
                     descricao = ?,
                     setor_responsavel = ?,
-                    frete = ?
+                    frete = ?,
+                    user_edit = ?,
+                    edited_at = GETDATE()
                 WHERE bo_number = ?
             """
 
     try:
         print(*dados_bo)
         cursor.execute(
-                update_query, (*dados_bo, bo_number))
+            update_query, (*dados_bo, username, bo_number))
         
         cursor.executemany("""
                 UPDATE BO_ITENS
