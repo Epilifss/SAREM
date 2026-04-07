@@ -52,10 +52,10 @@ class ReportPresenter:
         except Exception as e:
             self.view.show_error(f"Erro ao exportar Excel: {str(e)}")
 
-    def on_print_report(self, file_path):
+    def on_print_report(self):
         try:
             headers, data = self.view.get_report_table_data()
-            print_report(data, headers, file_path)
+            print_report(data, headers)
             self.view.show_message("Relatório enviado para impressão!")
         except Exception as e:
             self.view.show_error(f"Erro ao imprimir: {str(e)}")

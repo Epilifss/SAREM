@@ -57,7 +57,16 @@ class EstatisticasView:
         df = df.sort_values('Contagem', ascending=False)
 
         fig, ax = plt.subplots(figsize=(10, 6))
-        sns.barplot(data=df, x='Contagem', y='Setor', ax=ax, palette='viridis')
+        sns.barplot(
+            data=df,
+            x='Contagem',
+            y='Setor',
+            hue='Setor',
+            dodge=False,
+            legend=False,
+            ax=ax,
+            palette='viridis'
+        )
 
         ax.set_title(f"Distribuição de BO's por setor em ({ano})", fontsize=14, weight='bold')
         ax.set_xlabel("Número de BO's")

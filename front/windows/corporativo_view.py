@@ -7,6 +7,8 @@ from front.modais.show_details import exibir_detalhes
 from functools import partial
 from theme import estilizar_treeview, ajustar_largura_colunas
 import tkinter as tk
+from datetime import datetime
+import ttkbootstrap as tb
 
 class CorporativoModule:
     instance = None # Var de class que armazena a instância atual
@@ -29,6 +31,7 @@ class CorporativoModule:
 
         # Barra de pesquisa
         self.search_bar = SearchBar(self.root, self.pesquisar_bo, self.clear_search)
+        self._criar_filtro_periodo()
 
         # Lista de BOs
 
@@ -44,8 +47,54 @@ class CorporativoModule:
         self.search_bar.search_entry.bind('<Return>', self.pesquisar_bo)
         self.root.mainloop()
 
+    def _criar_filtro_periodo(self):
+        self.filtro_data_ativo = False
+        self.filtro_frame = tb.Frame(self.root)
+        self.filtro_frame.pack(fill=tk.X, padx=5, pady=(0, 5))
+
+        hoje = datetime.today()
+        primeiro_dia_mes = hoje.replace(day=1)
+
+        tb.Label(self.filtro_frame, text="Período:").pack(side=tk.LEFT, padx=(0, 5))
+        tb.Label(self.filtro_frame, text="De").pack(side=tk.LEFT, padx=(0, 2))
+        self.data_inicio_entry = tb.DateEntry(
+            self.filtro_frame,
+            dateformat="%d/%m/%Y",
+            startdate=primeiro_dia_mes,
+            width=12,
+        )
+        self.data_inicio_entry.pack(side=tk.LEFT, padx=(0, 6))
+
+        tb.Label(self.filtro_frame, text="Até").pack(side=tk.LEFT, padx=(0, 2))
+        self.data_fim_entry = tb.DateEntry(
+            self.filtro_frame,
+            dateformat="%d/%m/%Y",
+            startdate=hoje,
+            width=12,
+        )
+        self.data_fim_entry.pack(side=tk.LEFT, padx=(0, 8))
+
+        tb.Button(self.filtro_frame, text="Aplicar período", command=self.aplicar_filtro_data).pack(side=tk.LEFT, padx=(0, 5))
+        tb.Button(self.filtro_frame, text="Remover período", command=self.remover_filtro_data).pack(side=tk.LEFT)
+
+    def _obter_periodo(self):
+        if not self.filtro_data_ativo:
+            return None, None
+        data_inicio = self.data_inicio_entry.get_date().date()
+        data_fim = self.data_fim_entry.get_date().date()
+        return data_inicio, data_fim
+
+    def aplicar_filtro_data(self):
+        self.filtro_data_ativo = True
+        self.pesquisar_bo()
+
+    def remover_filtro_data(self):
+        self.filtro_data_ativo = False
+        self.pesquisar_bo()
+
     def carregar_bos(self, event=None):
-        bos = listar_bos("Corporativo")
+        data_inicio, data_fim = self._obter_periodo()
+        bos = listar_bos("Corporativo", data_inicio, data_fim)
         self.tree.delete(*self.tree.get_children())
         if bos:
             for bo in bos:
@@ -60,7 +109,14 @@ class CorporativoModule:
         ajustar_largura_colunas(self.tree)
 
     def pesquisar_bo(self, event=None):
-        pesq = pesquisar_bo('Corporativo', self.search_bar.search_entry.get())
+        termo = self.search_bar.search_entry.get().strip()
+        data_inicio, data_fim = self._obter_periodo()
+
+        if not termo and not self.filtro_data_ativo:
+            self.carregar_bos()
+            return
+
+        pesq = pesquisar_bo('Corporativo', termo, data_inicio, data_fim)
         self.tree.delete(*self.tree.get_children())
         if pesq:
             for row in pesq:
@@ -75,4 +131,4 @@ class CorporativoModule:
     def clear_search(self):
         self.search_bar.search_entry.delete(0, tk.END)
         self.search_bar.update_buttons()  # Atualiza os botões após limpar
-        self.carregar_bos()  # Recarrega os BOs
+        self.pesquisar_bo()  # Recarrega os BOs respeitando filtro de período

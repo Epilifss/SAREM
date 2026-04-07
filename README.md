@@ -15,3 +15,19 @@ back/: Gerencia a lógica de negócios, o acesso ao banco de dados e os serviço
 theme/: Centraliza a estilização dos componentes da interface, permitindo uma aparência coesa.
 assets/: Armazena os ícones e imagens utilizados na aplicação.
 O SAREM é uma solução completa para empresas que precisam de um sistema interno para rastrear e gerenciar incidentes e ocorrências de forma eficiente e segura.
+
+Atualizacao automatica (in-app):
+O SAREM agora suporta fluxo de atualizacao automatica sem exigir que o usuario abra o instalador manualmente.
+
+Como funciona:
+- O app consulta um manifesto JSON de atualizacao.
+- Se houver versao mais nova, exibe o resumo da release e pergunta se deseja atualizar.
+- Faz download com progresso, valida tamanho e hash SHA-256 (quando informado).
+- Agenda a instalacao silenciosa e encerra o app para concluir o processo.
+- Cria backup transacional da pasta da aplicacao antes de instalar (quando habilitado).
+- Se a instalacao falhar, executa rollback automatico a partir do backup.
+- Reinicia o app automaticamente ao final do processo.
+- Registra eventos em log local para suporte tecnico.
+
+Modelo de manifesto:
+- Consulte o arquivo [update_manifest.example.json](update_manifest.example.json).

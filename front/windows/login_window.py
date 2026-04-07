@@ -15,6 +15,8 @@ from front.modais.config_db import ConfigDBModal
 from front.windows.corporativo_view import CorporativoModule
 from front.windows.varejo_view import VarejoModule
 from front.windows.exportacao_view import ExportacaoModule
+from front.windows.changelog_window import ChangelogWindow
+from front.changelog_data import get_changelog_for_version
 from front import versao
 
 VERSAO_ATUAL = versao
@@ -106,6 +108,7 @@ class LoginWindow:
         hora = datetime.datetime.now().strftime("às %H:%M")
 
         if user.is_admin:
+            self._mostrar_changelog_se_necessario(user.username)
             print(printUser + "painel de administração " + hora)
             AdminPanel(self.parent)
             self.root.destroy()
@@ -126,8 +129,30 @@ class LoginWindow:
                 printUser = chosen_print_user
                 hora = chosen_hora
 
+            self._mostrar_changelog_se_necessario(user.username)
             self.root.destroy()
             self._open_module(chosen_module_type, user, printUser, hora)
+
+    def _mostrar_changelog_se_necessario(self, username):
+        if not username:
+            return
+
+        self.config.read(CONFIG_PATH)
+        if 'Changelog' not in self.config:
+            self.config['Changelog'] = {}
+
+        user_key = username.strip().lower()
+        versao_ja_vista = self.config['Changelog'].get(user_key, "")
+
+        if versao_ja_vista == VERSAO_ATUAL:
+            return
+
+        changelog_data = get_changelog_for_version(VERSAO_ATUAL)
+        ChangelogWindow(self.root, VERSAO_ATUAL, changelog_data)
+
+        self.config['Changelog'][user_key] = VERSAO_ATUAL
+        with open(CONFIG_PATH, "w") as configfile:
+            self.config.write(configfile)
 
     def _open_module(self, chosen_module_type, user, printUser, hora):
         if chosen_module_type == 'Corporativo':

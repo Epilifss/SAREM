@@ -1,0 +1,15 @@
+{
+  "version": "1.1.2",
+  "installer_url": "https://dl.dropboxusercontent.com/scl/fi/9gek6yajv7uyr13aqaoyf/SAREM_Version_v1.1.2.exe?rlkey=f3az6ks479n9p83qwyd6obzez&st=6psih2wm&dl=0",
+  "sha256": "d49e98819d43f0fd09db6c574758291773ea54fa88f593a1bbffdabef9d685cd",
+  "size": 118804941,
+  "mandatory": false,
+  "silent_args": "/SP- /VERYSILENT /NORESTART /CLOSEAPPLICATIONS",
+  "create_backup": true,
+  "keep_backup_on_success": false,
+  "release_notes": [
+    "Novo fluxo de atualizacao automatica dentro do SAREM.",
+    "Melhorias de seguranca com validacao de integridade por SHA-256.",
+    "Tratamento de retries e logs para suporte tecnico."
+  ]
+}

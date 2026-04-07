@@ -5,7 +5,7 @@ from datetime import datetime
 from back.utils import resource_path
 from front.components.treeview import listagemTreeview
 from front.presenters.report_presenter import ReportPresenter
-from theme import ajustar_largura_colunas, estilizar_treeview
+from theme import estilizar_treeview
 
 class ReportView():
     def __init__(self, parent, caller_id=None):
@@ -85,10 +85,11 @@ class ReportView():
         # Treeview
         self.treeview_component = listagemTreeview(
             self.root,
-            columns=["BO", "OP", "CLIENTE", "TIPO DE OCORRÊNCIA", "SETOR RESPONSÁVEL", "STATUS", "DATA DE REGISTRO"],
+            columns=["BO", "OP", "CLIENTE", "TIPO DE OCORRÊNCIA", "SETOR RESPONSÁVEL", "STATUS", "DATA DE REGISTRO", "PRODUTOS / MOTIVOS"],
             show="headings"
         )
         self.treeview_component.tree.pack(expand=True, fill=tk.BOTH, padx=10, pady=(5, 15))
+        self._configurar_colunas_relatorio()
 
         # Opções
         opt_frame = tb.Frame(self.root)
@@ -112,9 +113,7 @@ class ReportView():
             self.presenter.on_export_excel(file_path)
 
     def on_print(self):
-        file_path = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")])
-        if file_path:
-            self.presenter.on_print_report(file_path)
+        self.presenter.on_print_report()
 
     def get_selected_client(self):
         return self.clientes_cbmx.get()
@@ -159,27 +158,45 @@ class ReportView():
         tree = self.treeview_component.tree
         tree.delete(*tree.get_children())
         for row in data:
-            bo = str(row[1]).strip() if row[1] is not None else ""
-            op = str(row[2]).strip() if row[2] is not None else ""
-            cliente = str(row[3]).strip() if row[3] is not None else ""
-            tipo_ocorrencia = str(row[5]).strip() if row[5] is not None else ""
-            setor_responsavel = str(row[8]).strip() if row[8] is not None else ""
-            status = str(row[9]).strip() if row[9] is not None else ""
-            if row[12] is not None:
+            bo = str(row[0]).strip() if row[0] is not None else ""
+            op = str(row[1]).strip() if row[1] is not None else ""
+            cliente = str(row[2]).strip() if row[2] is not None else ""
+            tipo_ocorrencia = str(row[3]).strip() if row[3] is not None else ""
+            setor_responsavel = str(row[4]).strip() if row[4] is not None else ""
+            status = str(row[5]).strip() if row[5] is not None else ""
+            produtos_motivos = str(row[7]).strip() if row[7] is not None else ""
+            if row[6] is not None:
                 try:
-                    data_registro = row[12].strftime("%d/%m/%Y")
+                    data_registro = row[6].strftime("%d/%m/%Y")
                 except AttributeError:
-                    data_registro = str(row[12]).strip()
+                    data_registro = str(row[6]).strip()
             else:
                 data_registro = ""
 
             tree.insert(
                 "",
                 "end",
-                values=(bo, op, cliente, tipo_ocorrencia, setor_responsavel, status, data_registro)
+                values=(bo, op, cliente, tipo_ocorrencia, setor_responsavel, status, data_registro, produtos_motivos)
             )
         estilizar_treeview(tree)
-        ajustar_largura_colunas(tree)
+        self._configurar_colunas_relatorio()
+
+    def _configurar_colunas_relatorio(self):
+        tree = self.treeview_component.tree
+        colunas_fixas = {
+            "BO": 80,
+            "OP": 80,
+            "CLIENTE": 150,
+            "TIPO DE OCORRÊNCIA": 150,
+            "SETOR RESPONSÁVEL": 150,
+            "STATUS": 110,
+            "DATA DE REGISTRO": 130,
+        }
+
+        for coluna, largura in colunas_fixas.items():
+            tree.column(coluna, width=largura, minwidth=largura, stretch=False, anchor=tk.W)
+
+        tree.column("PRODUTOS / MOTIVOS", width=900, minwidth=320, stretch=True, anchor=tk.W)
 
     def get_report_table_data(self):
         tree = self.treeview_component.tree

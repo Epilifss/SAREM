@@ -31,7 +31,7 @@ def _can_track_bo(user):
         return bool(user.is_admin)
     return True
 
-def listar_bos(modulo):
+def listar_bos(modulo, data_inicio=None, data_fim=None):
     conn = create_connection()
     if conn is None:
         return None
@@ -41,7 +41,12 @@ def listar_bos(modulo):
         FROM bo_records
         WHERE status NOT LIKE 'Embarcado' AND D_E_L_E_T_ <> '*' AND modulo LIKE ?
     """
-    cursor.execute(query, modulo)
+    params = [modulo]
+    if data_inicio and data_fim:
+        query += " AND CAST(emissao_totvs AS DATE) BETWEEN ? AND ?"
+        params.extend([data_inicio, data_fim])
+
+    cursor.execute(query, params)
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -66,18 +71,38 @@ def listar_bo_protheus():
     conn.close()
     return [BO_protheus(*row) for row in rows]
     
-def pesquisar_bo(modulo, termo):
+def pesquisar_bo(modulo, termo, data_inicio=None, data_fim=None):
     conn = create_connection()
     if conn is None:
         return None
     cursor = conn.cursor()
-    cursor.execute("SELECT bo_number, op, status, tipo_ocorrencia, setor_responsavel, loja FROM bo_records WHERE modulo LIKE ? AND status NOT LIKE 'Embarcado' AND bo_number LIKE ? AND D_E_L_E_T_ <> '*'", (modulo, f"%{termo}%",))
+    query = """
+        SELECT bo_number, op, status, tipo_ocorrencia, setor_responsavel, loja
+        FROM bo_records
+        WHERE modulo LIKE ?
+            AND status NOT LIKE 'Embarcado'
+            AND D_E_L_E_T_ <> '*'
+            AND (
+                bo_number LIKE ?
+                OR op LIKE ?
+                OR loja LIKE ?
+                OR tipo_ocorrencia LIKE ?
+            )
+    """
+    like_termo = f"%{termo}%"
+    params = [modulo, like_termo, like_termo, like_termo, like_termo]
+
+    if data_inicio and data_fim:
+        query += " AND CAST(emissao_totvs AS DATE) BETWEEN ? AND ?"
+        params.extend([data_inicio, data_fim])
+
+    cursor.execute(query, params)
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
     return rows
 
-def pesquisar_bo_protheus(termo):
+def pesquisar_bo_protheus(termo, data_inicio=None, data_fim=None):
     conn = create_connection_Protheus()
     if conn is None:
         return None
@@ -93,9 +118,15 @@ def pesquisar_bo_protheus(termo):
                 OR UPPER(C5_NUM) LIKE UPPER(?)
                 OR UPPER(C5_NOME) LIKE UPPER(?))
             AND C5_FILIAL IN ('0101','0201')
-        ORDER BY C5_EMISSAO DESC
         """
-    cursor.execute(query, (like_termo, like_termo, like_termo))
+    params = [like_termo, like_termo, like_termo]
+
+    if data_inicio and data_fim:
+        query += " AND CAST(CONVERT(DATETIME, C5_EMISSAO, 112) AS DATE) BETWEEN ? AND ?"
+        params.extend([data_inicio, data_fim])
+
+    query += " ORDER BY C5_EMISSAO DESC"
+    cursor.execute(query, params)
     rows = cursor.fetchall()
     cursor.close()
     conn.close()

@@ -6,6 +6,8 @@ class SearchBar:
         self.parent = parent
         self.search_command = search_command
         self.clear_command = clear_command
+        self._search_after_id = None
+        self._debounce_ms = 300
 
         self.frame = tb.Frame(self.parent)
         self.frame.pack(fill=tk.X)
@@ -21,8 +23,14 @@ class SearchBar:
             self.frame, text="Limpar", command=self.clear_command)
         self.clear_button.pack_forget()
 
-        self.search_entry.bind('<KeyRelease>', self.update_buttons)
+        self.search_entry.bind('<KeyRelease>', self._on_key_release)
         self.search_entry.bind('<Return>', self.search_command)
+
+    def _on_key_release(self, event=None):
+        self.update_buttons()
+        if self._search_after_id is not None:
+            self.parent.after_cancel(self._search_after_id)
+        self._search_after_id = self.parent.after(self._debounce_ms, self.search_command)
 
     def update_buttons(self, event=None):
         termo = self.search_entry.get()
