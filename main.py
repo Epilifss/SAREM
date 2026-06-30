@@ -36,7 +36,7 @@ def mostrar_splash(root):
     except Exception as e:
         print(f"Erro ao exibir imagem:", e)
         tk.Label(splash, text="SAREM", font=("Arial", 30), bg="white").pack(pady=(60, 10))
-    tk.Label(splash, text="Powered by Epilifss", font=("Arial", 12), bg="white").pack()
+    tk.Label(splash, text="Powered by EKO Tecnologia", font=("Arial", 12), bg="white").pack()
     return splash
 
 splash = mostrar_splash(root)

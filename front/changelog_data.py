@@ -1,7 +1,7 @@
 def get_changelog_for_version(version):
     changelog = {
-        "1.1.3": {
-            "titulo": "Atualizacao 1.1.3",
+        "1.1.4": {
+            "titulo": "Atualizacao 1.1.4",
             "novidades": [
                 "Implementado filtro por período na tela de acompanhar nova BO.",
                 "Implementado filtro por período nas telas de BOs acompanhadas.",

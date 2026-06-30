@@ -207,7 +207,7 @@ def listar_itens_bo(valor1, valor2):
     query = """SELECT SC6.C6_CODTIDI, SC6.C6_DESCRI, SC6.C6_LINHA
         FROM SC6010 SC6
         INNER JOIN SC5010 SC5 ON (SC5.C5_NUM = SC6.C6_NUM AND SC5.C5_FILIAL = SC6.C6_FILIAL AND SC5.D_E_L_E_T_ <> '*')
-        WHERE SC6.C6_NUM LIKE ? AND SC5.C5_PEDREPR LIKE ? AND SC5.C5_PEDREPR LIKE ?"""
+        WHERE SC6.C6_NUM LIKE ? AND SC5.C5_PEDREPR LIKE ? AND SC5.C5_PEDREPR LIKE ? AND SC6.D_E_L_E_T_ <> '*'"""
 
     cursor.execute(query, (f"%{valor1}%", "%BO%", f"%{valor2}%"))
     rows = cursor.fetchall()
