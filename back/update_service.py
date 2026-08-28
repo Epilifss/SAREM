@@ -89,14 +89,18 @@ def _normalize_manifest(raw):
         notes = "\n".join(f"- {n}" for n in notes)
     notes = str(notes).strip()
 
+    silent_args = str(raw.get("silent_args", "/SP- /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS")).strip()
+    if "/SUPPRESSMSGBOXES" not in silent_args.upper():
+        silent_args = f"{silent_args} /SUPPRESSMSGBOXES".strip()
+
     return {
         "version": version,
         "installer_url": installer_url,
         "sha256": str(raw.get("sha256", "")).strip().lower(),
         "size": int(raw.get("size", 0) or 0),
         "mandatory": bool(raw.get("mandatory", False)),
-        "silent_args": str(raw.get("silent_args", "/SP- /VERYSILENT /NORESTART /CLOSEAPPLICATIONS")).strip(),
-        "create_backup": bool(raw.get("create_backup", True)),
+        "silent_args": silent_args,
+        "create_backup": bool(raw.get("create_backup", False)),
         "keep_backup_on_success": bool(raw.get("keep_backup_on_success", False)),
         "release_notes": notes,
     }
@@ -222,14 +226,14 @@ def _current_app_paths():
 def _schedule_transactional_update(installer_path, manifest):
     pid = os.getpid()
     silent_args = manifest["silent_args"]
-    create_backup = manifest.get("create_backup", True)
+    create_backup = False
     keep_backup = manifest.get("keep_backup_on_success", False)
 
     app_dir, app_exe = _current_app_paths()
     temp_root = tempfile.gettempdir()
     stamp = time.strftime("%Y%m%d_%H%M%S")
     backup_dir = os.path.join(temp_root, f"sarem_backup_{stamp}")
-    helper_ps1 = os.path.join(temp_root, "sarem_apply_update.ps1")
+    helper_ps1 = os.path.join(temp_root, f"sarem_apply_update_{stamp}.ps1")
     apply_log = os.path.join(os.path.dirname(get_config_path()), "update_apply.log")
 
     ps_script = f"""
@@ -241,8 +245,8 @@ param(
     [string]$AppExe,
     [string]$BackupDir,
     [string]$LogPath,
-    [bool]$CreateBackup,
-    [bool]$KeepBackup
+    [int]$CreateBackup,
+    [int]$KeepBackup
 )
 
 $ErrorActionPreference = 'Stop'
@@ -252,10 +256,28 @@ function Write-Log([string]$Message) {{
     Add-Content -Path $LogPath -Value "[$ts] $Message"
 }}
 
-function Wait-TargetProcess([int]$PidToWait) {{
+function Wait-TargetProcess([int]$PidToWait, [int]$TimeoutSeconds) {{
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ($true) {{
         $p = Get-Process -Id $PidToWait -ErrorAction SilentlyContinue
         if (-not $p) {{ break }}
+
+        if ((Get-Date) -gt $deadline) {{
+            Write-Log "Timeout aguardando processo $PidToWait. Tentando encerrar aplicacao."
+            try {{
+                $p.CloseMainWindow() | Out-Null
+                Start-Sleep -Seconds 5
+            }}
+            catch {{}}
+
+            $p = Get-Process -Id $PidToWait -ErrorAction SilentlyContinue
+            if ($p) {{
+                Stop-Process -Id $PidToWait -Force -ErrorAction SilentlyContinue
+                Write-Log "Processo $PidToWait encerrado forcadamente para aplicar update."
+            }}
+            break
+        }}
+
         Start-Sleep -Seconds 1
     }}
 }}
@@ -270,10 +292,10 @@ function Run-Robocopy([string]$From, [string]$To) {{
 
 try {{
     Write-Log "Updater iniciado. Aguardando encerramento do processo $TargetPid."
-    Wait-TargetProcess -PidToWait $TargetPid
+    Wait-TargetProcess -PidToWait $TargetPid -TimeoutSeconds 10
 
     $canRollback = $false
-    if ($CreateBackup) {{
+    if ($CreateBackup -eq 1) {{
         Write-Log "Iniciando backup de $AppDir para $BackupDir"
         Run-Robocopy -From $AppDir -To $BackupDir
         $canRollback = $true
@@ -291,7 +313,7 @@ try {{
         Remove-Item $InstallerPath -Force -ErrorAction SilentlyContinue
     }}
 
-    if ($CreateBackup -and -not $KeepBackup -and (Test-Path $BackupDir)) {{
+    if (($CreateBackup -eq 1) -and ($KeepBackup -ne 1) -and (Test-Path $BackupDir)) {{
         Remove-Item $BackupDir -Recurse -Force -ErrorAction SilentlyContinue
         Write-Log "Backup removido apos sucesso."
     }}
@@ -304,7 +326,7 @@ try {{
 catch {{
     Write-Log "Falha no update: $($_.Exception.Message)"
     try {{
-        if ($CreateBackup -and (Test-Path $BackupDir)) {{
+        if (($CreateBackup -eq 1) -and (Test-Path $BackupDir)) {{
             Write-Log "Iniciando rollback a partir de $BackupDir"
             Run-Robocopy -From $BackupDir -To $AppDir
             Write-Log "Rollback concluido com sucesso."
@@ -349,9 +371,9 @@ finally {{
         "-LogPath",
         apply_log,
         "-CreateBackup",
-        "$true" if create_backup else "$false",
+        "1" if create_backup else "0",
         "-KeepBackup",
-        "$true" if keep_backup else "$false",
+        "1" if keep_backup else "0",
     ]
 
     creation_flags = 0
@@ -359,6 +381,39 @@ finally {{
         creation_flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
     subprocess.Popen(ps_cmd, creationflags=creation_flags)
+
+
+def _show_installing_notice(parent, version):
+    notice = tk.Toplevel(parent)
+    notice.title("Atualizacao")
+    notice.iconbitmap(resource_path("SAREM.ico"))
+    notice.geometry("420x130")
+    notice.transient(parent)
+    notice.resizable(False, False)
+
+    label = tb.Label(notice, text=f"Instalando versao {version} em segundo plano...")
+    label.pack(pady=(18, 8))
+
+    progress = tb.Progressbar(notice, orient="horizontal", length=340, mode="indeterminate")
+    progress.pack(pady=8)
+    progress.start(12)
+
+    status = tb.Label(notice, text="O SAREM sera fechado automaticamente.")
+    status.pack(pady=(0, 8))
+
+    center_window_screen(notice, 420, 130)
+    notice.update_idletasks()
+    return notice
+
+
+def _close_app_for_update(parent, delay_ms=100):
+    try:
+        parent.after(delay_ms, parent.destroy)
+    except Exception:
+        try:
+            parent.destroy()
+        except Exception:
+            pass
 
 
 def _acquire_lock():
@@ -425,12 +480,8 @@ def verificar_e_att(parent):
         try:
             _schedule_transactional_update(installer_path, manifest)
             _log_update(f"Atualizacao {remote_version} agendada com sucesso.")
-            messagebox.showinfo(
-                "Atualizacao",
-                "Atualizacao baixada com sucesso.\n"
-                "O SAREM sera fechado para concluir a instalacao automatica com rollback em caso de falha."
-            )
-            parent.quit()
+            _show_installing_notice(parent, remote_version)
+            _close_app_for_update(parent, delay_ms=1800)
             return False
         except Exception as exc:
             _log_update(f"Falha ao agendar atualizacao silenciosa: {exc}")

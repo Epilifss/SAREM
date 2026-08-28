@@ -23,9 +23,8 @@ Como funciona:
 - O app consulta um manifesto JSON de atualizacao.
 - Se houver versao mais nova, exibe o resumo da release e pergunta se deseja atualizar.
 - Faz download com progresso, valida tamanho e hash SHA-256 (quando informado).
-- Agenda a instalacao silenciosa e encerra o app para concluir o processo.
-- Cria backup transacional da pasta da aplicacao antes de instalar (quando habilitado).
-- Se a instalacao falhar, executa rollback automatico a partir do backup.
+- Agenda a instalacao silenciosa e encerra o app para concluir o processo sem cliques adicionais.
+- Executa o instalador diretamente apos o fechamento do app, evitando backup previo demorado.
 - Reinicia o app automaticamente ao final do processo.
 - Registra eventos em log local para suporte tecnico.
 
