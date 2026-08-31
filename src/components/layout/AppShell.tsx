@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, Link } from 'react-router-dom'
 import { useAuth } from '../../providers/AuthProvider'
 
 export default function AppShell() {
@@ -13,13 +13,13 @@ export default function AppShell() {
         </div>
         
         <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          <a href="/" style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', textDecoration: 'none', color: 'var(--text-primary)', fontWeight: 500, background: 'rgba(79, 70, 229, 0.1)' }}>Dashboard</a>
-          <a href="/bos" style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', textDecoration: 'none', color: 'var(--text-secondary)', fontWeight: 500 }}>Boletins</a>
+          <Link to="/" style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', textDecoration: 'none', color: 'var(--text-primary)', fontWeight: 500, background: 'rgba(79, 70, 229, 0.1)' }}>Dashboard</Link>
+          <Link to="/bos" style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', textDecoration: 'none', color: 'var(--text-secondary)', fontWeight: 500 }}>Boletins</Link>
           {profile?.can_track_bo && (
-            <a href="/bos/new" style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', textDecoration: 'none', color: 'var(--text-secondary)', fontWeight: 500 }}>Acompanhar BO</a>
+            <Link to="/bos/new" style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', textDecoration: 'none', color: 'var(--text-secondary)', fontWeight: 500 }}>Acompanhar BO</Link>
           )}
           {profile?.is_admin && (
-            <a href="/admin/users" style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', textDecoration: 'none', color: 'var(--text-secondary)', fontWeight: 500, marginTop: '1rem', borderTop: '1px solid var(--surface-border)' }}>Gestão de Usuários</a>
+            <Link to="/admin/users" style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', textDecoration: 'none', color: 'var(--text-secondary)', fontWeight: 500, marginTop: '1rem', borderTop: '1px solid var(--surface-border)' }}>Gestão de Usuários</Link>
           )}
         </nav>
 
