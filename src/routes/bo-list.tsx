@@ -11,18 +11,44 @@ export default function BoList() {
   const navigate = useNavigate()
   const { profile } = useAuth()
 
+  const [filterTerm, setFilterTerm] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
+  const [filterDateStart, setFilterDateStart] = useState('')
+  const [filterDateEnd, setFilterDateEnd] = useState('')
+
   useEffect(() => {
     fetchBOs()
-  }, [])
+  }, []) // initial load
 
-  const fetchBOs = async () => {
+  const fetchBOs = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
     setLoading(true)
-    const { data, error } = await supabase
+
+    let query = supabase
       .from('bo_records')
       .select('*')
       .eq('is_deleted', false)
       .order('created_at', { ascending: false })
-      .limit(50)
+      .limit(100)
+
+    if (filterStatus) {
+      query = query.eq('status', filterStatus)
+    }
+
+    if (filterDateStart) {
+      query = query.gte('emissao_totvs', filterDateStart)
+    }
+
+    if (filterDateEnd) {
+      query = query.lte('emissao_totvs', filterDateEnd)
+    }
+
+    if (filterTerm) {
+      const term = filterTerm.trim()
+      query = query.or(`bo_number.ilike.%${term}%,op.ilike.%${term}%,loja.ilike.%${term}%`)
+    }
+
+    const { data, error } = await query
 
     if (error) {
       console.error('Error fetching BOs:', error.message)
@@ -37,7 +63,15 @@ export default function BoList() {
     { header: 'OP', accessor: 'op' as keyof BoRecord },
     { header: 'Loja', accessor: 'loja' as keyof BoRecord },
     { header: 'Tipo Ocorrência', accessor: 'tipo_ocorrencia' as keyof BoRecord },
-    { header: 'Status', accessor: 'status' as keyof BoRecord },
+    { header: 'Status', accessor: (row: BoRecord) => (
+        <span style={{ 
+          fontSize: '0.8rem', padding: '0.2rem 0.5rem', borderRadius: '12px',
+          background: row.status === 'Embarcado' ? 'var(--success-color)' : 'var(--primary-color)', color: 'white' 
+        }}>
+          {row.status}
+        </span>
+      ) 
+    },
     { 
       header: 'Emissão Totvs', 
       accessor: (row: BoRecord) => row.emissao_totvs ? new Date(row.emissao_totvs).toLocaleDateString() : '-' 
@@ -65,9 +99,62 @@ export default function BoList() {
         )}
       </div>
 
-      <div style={{ background: 'var(--surface-color)', padding: '1rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--surface-border)' }}>
-        {/* Placeholder para os Filtros */}
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Filtros em construção...</p>
+      <div style={{ background: 'var(--surface-color)', padding: '1.5rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--surface-border)', boxShadow: 'var(--shadow-sm)' }}>
+        <form onSubmit={fetchBOs} style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-end' }}>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: '1 1 200px' }}>
+            <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-secondary)' }}>Buscar</label>
+            <input 
+              type="text" 
+              placeholder="BO, OP ou Loja..." 
+              value={filterTerm}
+              onChange={e => setFilterTerm(e.target.value)}
+              style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: '1 1 150px' }}>
+            <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-secondary)' }}>Status</label>
+            <select 
+              value={filterStatus}
+              onChange={e => setFilterStatus(e.target.value)}
+              style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1' }}
+            >
+              <option value="">Todos</option>
+              <option value="Em Andamento">Em Andamento</option>
+              <option value="Aguardando Aprovação">Aguardando Aprovação</option>
+              <option value="Aguardando Coleta">Aguardando Coleta</option>
+              <option value="Embarcado">Embarcado</option>
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: '1 1 120px' }}>
+            <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-secondary)' }}>Emissão (Início)</label>
+            <input 
+              type="date" 
+              value={filterDateStart}
+              onChange={e => setFilterDateStart(e.target.value)}
+              style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: '1 1 120px' }}>
+            <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-secondary)' }}>Emissão (Fim)</label>
+            <input 
+              type="date" 
+              value={filterDateEnd}
+              onChange={e => setFilterDateEnd(e.target.value)}
+              style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1' }}
+            />
+          </div>
+
+          <button 
+            type="submit" 
+            style={{ padding: '0.75rem 1.5rem', background: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', fontWeight: 600, cursor: 'pointer' }}
+          >
+            Filtrar
+          </button>
+        </form>
       </div>
 
       <DataTable 

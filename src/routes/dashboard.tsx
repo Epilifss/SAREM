@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import { useAuth } from '../providers/AuthProvider'
 import { supabase } from '../lib/supabase'
 
 export default function Dashboard() {
+  const { profile } = useAuth()
   const [stats, setStats] = useState({
     abertos: 0,
     emAndamento: 0,
@@ -10,16 +12,20 @@ export default function Dashboard() {
   })
 
   useEffect(() => {
-    fetchStats()
-  }, [])
+    if (profile) fetchStats()
+  }, [profile])
 
   const fetchStats = async () => {
-    // This is a naive implementation for the MVP. 
-    // In a real scenario, this would be an RPC call or a view.
-    const { data, error } = await supabase
+    let query = supabase
       .from('bo_records')
       .select('status')
       .eq('is_deleted', false)
+
+    if (profile && profile.module !== 'Todos' && !profile.is_admin) {
+      query = query.eq('modulo', profile.module)
+    }
+
+    const { data, error } = await query
 
     if (!error && data) {
       const emAndamento = data.filter(b => b.status === 'Em Andamento').length

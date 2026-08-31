@@ -25,3 +25,13 @@ export type BoRecord = {
   is_deleted: boolean
   created_at: string
 }
+
+export type AuditLog = {
+  id: string
+  user_id: string
+  action: string
+  entity: string
+  entity_id: string
+  metadata: any
+  created_at: string
+}

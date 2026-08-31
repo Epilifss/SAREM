@@ -18,6 +18,9 @@ export default function AppShell() {
           {profile?.can_track_bo && (
             <a href="/bos/new" style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', textDecoration: 'none', color: 'var(--text-secondary)', fontWeight: 500 }}>Acompanhar BO</a>
           )}
+          {profile?.is_admin && (
+            <a href="/admin/users" style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', textDecoration: 'none', color: 'var(--text-secondary)', fontWeight: 500, marginTop: '1rem', borderTop: '1px solid var(--surface-border)' }}>Gestão de Usuários</a>
+          )}
         </nav>
 
         <div style={{ paddingTop: '1rem', borderTop: '1px solid var(--surface-border)', marginTop: 'auto' }}>
