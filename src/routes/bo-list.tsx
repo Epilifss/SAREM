@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { BoRecord } from '../types'
+import type { BoRecord } from '../types'
 import { DataTable } from '../components/ui/DataTable'
 import { useAuth } from '../providers/AuthProvider'
 

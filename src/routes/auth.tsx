@@ -1,6 +1,5 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { useAuth } from '../providers/AuthProvider'
 import { supabase } from '../lib/supabase'
 
 export default function AuthPage() {

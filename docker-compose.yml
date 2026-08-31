@@ -1,15 +1,12 @@
-version: '3.8'
-
 services:
   web:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+        - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
     container_name: sarem_web
     ports:
       - "80:80"
     restart: unless-stopped
-    # Variáveis de ambiente podem ser passadas aqui para o build ou run, se necessário.
-    # environment:
-    #   - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-    #   - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}

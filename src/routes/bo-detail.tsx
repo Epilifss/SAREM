@@ -1,12 +1,11 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { supabase } from '../lib/supabase'
-import { BoRecord, ProtheusBOItem } from '../types'
+import type { BoRecord } from '../types'
 import { useAuth } from '../providers/AuthProvider'
-import { protheusService } from '../services/protheus/protheusService'
 
 const editSchema = z.object({
   tipo_ocorrencia: z.string().min(1, 'Selecione o tipo'),

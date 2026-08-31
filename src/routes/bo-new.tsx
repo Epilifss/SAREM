@@ -1,9 +1,10 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
-import { protheusService, ProtheusBO, ProtheusBOItem } from '../services/protheus/protheusService'
+import { protheusService } from '../services/protheus/protheusService'
+import type { ProtheusBO, ProtheusBOItem } from '../services/protheus/protheusService'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../providers/AuthProvider'
 
