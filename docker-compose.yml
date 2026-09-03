@@ -6,6 +6,9 @@ services:
       args:
         - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
         - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+    environment:
+      PROTHEUS_API_KEY: ${PROTHEUS_API_KEY}
+      NGINX_ENVSUBST_VARS: '$PROTHEUS_API_KEY'
     container_name: sarem_web
     ports:
       - "80:80"

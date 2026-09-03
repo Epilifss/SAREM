@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { supabase } from '../lib/supabase'
-import type { BoRecord, AuditLog } from '../types'
+import type { BoRecord, BoItem, AuditLog } from '../types'
 import { useAuth } from '../providers/AuthProvider'
 
 const editSchema = z.object({
@@ -22,11 +22,13 @@ export default function BoDetail() {
   const { profile } = useAuth()
   
   const [bo, setBo] = useState<BoRecord | null>(null)
-  const [items, setItems] = useState<any[]>([])
+  const [items, setItems] = useState<BoItem[]>([])
   const [history, setHistory] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [itemEdits, setItemEdits] = useState<Record<number, Partial<BoItem>>>({})
   const [activeTab, setActiveTab] = useState<'info' | 'history'>('info')
 
   const { register, handleSubmit, reset } = useForm<EditFormData>({
@@ -34,20 +36,25 @@ export default function BoDetail() {
   })
 
   useEffect(() => {
-    if (id) {
+    if (id && profile) {
       fetchBo()
       fetchHistory()
     }
-  }, [id])
+  }, [id, profile])
 
   const fetchBo = async () => {
     setLoading(true)
-    const { data, error } = await supabase
+    let query = supabase
       .from('bo_records')
       .select('*')
       .eq('id', id)
-      .eq('is_deleted', false)
-      .single()
+      .or('d_e_l_e_t_.neq.*,d_e_l_e_t_.is.null')
+
+    if (profile && profile.module !== 'Todos' && !profile.is_admin) {
+      query = query.eq('modulo', profile.module)
+    }
+
+    const { data, error } = await query.single()
 
     if (error) {
       console.error(error)
@@ -63,12 +70,18 @@ export default function BoDetail() {
       descricao: data.descricao
     })
 
-    const { data: itemsData } = await supabase
+    const { data: itemsData, error: itemsError } = await supabase
       .from('bo_itens')
       .select('*')
-      .eq('bo_id', id)
+      .like('bo_ref', `${data.bo_number.trim()}%`)
+      .order('id', { ascending: true })
     
-    setItems(itemsData || [])
+    if (itemsError) {
+      console.error('Erro ao buscar itens do BO:', itemsError.message)
+      setItems([])
+    } else {
+      setItems((itemsData as BoItem[]) || [])
+    }
     setLoading(false)
   }
 
@@ -104,8 +117,26 @@ export default function BoDetail() {
       .eq('id', id)
 
     if (!error) {
+      const itemUpdates = Object.entries(itemEdits).map(([itemId, item]) =>
+        supabase.from('bo_itens').update({
+          cod: item.cod,
+          desc: item.desc,
+          linha: item.linha,
+          motivo: item.motivo,
+        }).eq('id', Number(itemId))
+      )
+      const itemResults = await Promise.all(itemUpdates)
+      const itemError = itemResults.find(result => result.error)?.error
+      if (itemError) {
+        alert('BO atualizado, mas houve um erro ao atualizar os itens: ' + itemError.message)
+        setIsSaving(false)
+        return
+      }
+
+      setItems(prev => prev.map(item => ({ ...item, ...(itemEdits[item.id] || {}) })))
       setBo(prev => prev ? { ...prev, ...data } : null)
       setIsEditing(false)
+      setItemEdits({})
       fetchHistory() // refresh history
     } else {
       alert('Erro ao atualizar BO: ' + error.message)
@@ -135,18 +166,18 @@ export default function BoDetail() {
 
   const handleDelete = async () => {
     if (!profile?.can_delete_bo) return
-    if (!window.confirm('Deseja realmente excluir este BO?')) return
 
     const { error } = await supabase
       .from('bo_records')
       .update({ 
-        is_deleted: true,
+        d_e_l_e_t_: '*',
         user_delet: profile.id,
         deleted_at: new Date().toISOString()
       })
       .eq('id', id)
     
     if (!error) {
+      setIsDeleteModalOpen(false)
       navigate('/bos')
     } else {
       alert('Erro ao excluir: ' + error.message)
@@ -162,7 +193,11 @@ export default function BoDetail() {
   }
 
   return (
-    <div style={{ maxWidth: '1000px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+    <div className="bo-detail-page" style={{ maxWidth: '1000px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+      <div className="bo-detail-actions">
+        <button className="secondary-action" type="button" onClick={() => navigate(-1)}>← Voltar</button>
+        <span>Detalhes do boletim</span>
+      </div>
       
       {/* HEADER E STATUS */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', background: 'var(--surface-color)', padding: '2rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--surface-border)', boxShadow: 'var(--shadow-sm)' }}>
@@ -170,7 +205,7 @@ export default function BoDetail() {
           <h1 style={{ fontSize: '1.75rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
             {bo.bo_number} 
             <span style={{ fontSize: '0.85rem', padding: '0.25rem 0.75rem', background: bo.status === 'Embarcado' ? 'var(--success-color)' : 'var(--primary-color)', color: 'white', borderRadius: '12px', fontWeight: 600 }}>
-              {bo.status}
+              {bo.status || '-'}
             </span>
           </h1>
           <p style={{ color: 'var(--text-secondary)' }}>Loja/Cliente: {bo.loja} | Módulo: {bo.modulo}</p>
@@ -181,7 +216,7 @@ export default function BoDetail() {
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Mudar Status:</span>
               <select 
-                value={bo.status} 
+                value={bo.status || ''} 
                 onChange={(e) => handleStatusChange(e.target.value)}
                 style={{ padding: '0.5rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1' }}
               >
@@ -193,7 +228,7 @@ export default function BoDetail() {
             </div>
           )}
           {profile?.can_delete_bo && (
-            <button onClick={handleDelete} style={{ background: 'transparent', color: 'var(--error-color)', border: 'none', cursor: 'pointer', fontSize: '0.875rem', marginTop: '0.5rem' }}>
+            <button onClick={() => setIsDeleteModalOpen(true)} style={{ background: 'transparent', color: 'var(--error-color)', border: 'none', cursor: 'pointer', fontSize: '0.875rem', marginTop: '0.5rem' }}>
               Excluir BO
             </button>
           )}
@@ -224,7 +259,7 @@ export default function BoDetail() {
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
                 <h3 style={{ color: 'var(--text-secondary)' }}>Dados do SAREM</h3>
                 {profile?.can_edit_bo && !isEditing && (
-                  <button onClick={() => setIsEditing(true)} style={{ background: 'transparent', color: 'var(--primary-color)', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Editar</button>
+                  <button onClick={() => { setItemEdits(Object.fromEntries(items.map(item => [item.id, { cod: item.cod || '', desc: item.desc || '', linha: item.linha || '', motivo: item.motivo || '' }]))); setIsEditing(true) }} style={{ background: 'transparent', color: 'var(--primary-color)', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Editar</button>
                 )}
               </div>
               
@@ -267,7 +302,7 @@ export default function BoDetail() {
                   </div>
                   
                   <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
-                    <button type="button" onClick={() => setIsEditing(false)} style={{ flex: 1, padding: '0.5rem', background: '#e2e8f0', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>Cancelar</button>
+                    <button type="button" onClick={() => { setIsEditing(false); setItemEdits({}) }} style={{ flex: 1, padding: '0.5rem', background: '#e2e8f0', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>Cancelar</button>
                     <button type="submit" disabled={isSaving} style={{ flex: 1, padding: '0.5rem', background: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
                       {isSaving ? 'Salvando...' : 'Salvar'}
                     </button>
@@ -304,10 +339,10 @@ export default function BoDetail() {
                 <tbody>
                   {items.map(item => (
                     <tr key={item.id} style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                      <td style={{ padding: '0.75rem 0', fontWeight: 500 }}>{item.cod}</td>
-                      <td style={{ padding: '0.75rem 0' }}>{item.desc}</td>
-                      <td style={{ padding: '0.75rem 0' }}>{item.linha}</td>
-                      <td style={{ padding: '0.75rem 0' }}>{item.motivo}</td>
+                      <td style={{ padding: '0.75rem 0', fontWeight: 500 }}>{isEditing ? <input value={itemEdits[item.id]?.cod ?? item.cod ?? ''} onChange={event => setItemEdits(prev => ({ ...prev, [item.id]: { ...prev[item.id], cod: event.target.value } }))} /> : item.cod}</td>
+                      <td style={{ padding: '0.75rem 0' }}>{isEditing ? <input value={itemEdits[item.id]?.desc ?? item.desc ?? ''} onChange={event => setItemEdits(prev => ({ ...prev, [item.id]: { ...prev[item.id], desc: event.target.value } }))} /> : item.desc}</td>
+                      <td style={{ padding: '0.75rem 0' }}>{isEditing ? <input value={itemEdits[item.id]?.linha ?? item.linha ?? ''} onChange={event => setItemEdits(prev => ({ ...prev, [item.id]: { ...prev[item.id], linha: event.target.value } }))} /> : item.linha}</td>
+                      <td style={{ padding: '0.75rem 0' }}>{isEditing ? <input value={itemEdits[item.id]?.motivo ?? item.motivo ?? ''} onChange={event => setItemEdits(prev => ({ ...prev, [item.id]: { ...prev[item.id], motivo: event.target.value } }))} /> : item.motivo}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -344,6 +379,19 @@ export default function BoDetail() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {isDeleteModalOpen && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setIsDeleteModalOpen(false)}>
+          <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="delete-bo-title" onMouseDown={event => event.stopPropagation()}>
+            <h2 id="delete-bo-title">Excluir BO?</h2>
+            <p>O BO será marcado como excluído e não será removido definitivamente do banco.</p>
+            <div className="confirm-modal-actions">
+              <button className="secondary-action" type="button" onClick={() => setIsDeleteModalOpen(false)}>Cancelar</button>
+              <button className="danger-action" type="button" onClick={handleDelete}>Excluir BO</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

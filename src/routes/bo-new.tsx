@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -7,6 +7,7 @@ import { protheusService } from '../services/protheus/protheusService'
 import type { ProtheusBO, ProtheusBOItem } from '../services/protheus/protheusService'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../providers/AuthProvider'
+import { SearchSelectModal } from '../components/ui/SearchSelectModal'
 
 const formSchema = z.object({
   tipo_ocorrencia: z.string().min(1, 'Selecione o tipo de ocorrência'),
@@ -28,10 +29,50 @@ export default function BoNew() {
   const [boItems, setBoItems] = useState<ProtheusBOItem[]>([])
   const [isSaving, setIsSaving] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [motivoOptions, setMotivoOptions] = useState<string[]>([])
+  const [occurrenceOptions, setOccurrenceOptions] = useState<string[]>([])
+  const [sectorOptions, setSectorOptions] = useState<string[]>([])
+  const [itemMotives, setItemMotives] = useState<Record<number, string>>({})
+  const [customItemMotives, setCustomItemMotives] = useState<Record<number, string>>({})
 
-  const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(formSchema)
   })
+  const occurrence = watch('tipo_ocorrencia')
+  const sector = watch('setor_responsavel')
+  const freight = watch('frete')
+
+  useEffect(() => {
+    const loadInitialData = async () => {
+      setIsSearching(true)
+      setErrorMsg(null)
+      try {
+        const [bos, occurrencesResult, itemMotivesResult] = await Promise.all([
+          protheusService.searchBOs(),
+          supabase.from('bo_records').select('tipo_ocorrencia,setor_responsavel'),
+          supabase.from('bo_itens').select('motivo'),
+        ])
+
+        if (occurrencesResult.error) throw occurrencesResult.error
+        if (itemMotivesResult.error) throw itemMotivesResult.error
+
+        setSearchResults(bos)
+        const occurrenceValues = (occurrencesResult.data || []).map(row => row.tipo_ocorrencia)
+        const sectorValues = (occurrencesResult.data || []).map(row => row.setor_responsavel)
+        const motiveValues = (itemMotivesResult.data || []).map(row => row.motivo)
+        const unique = (values: (string | null)[]) => [...new Set(values.map(value => value?.trim()).filter(Boolean) as string[])]
+        setOccurrenceOptions(unique(occurrenceValues))
+        setSectorOptions(unique(sectorValues))
+        setMotivoOptions(unique(motiveValues))
+      } catch (err: any) {
+        setErrorMsg(err.message || 'Erro ao carregar os BOs do Protheus.')
+      } finally {
+        setIsSearching(false)
+      }
+    }
+
+    loadInitialData()
+  }, [])
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -43,7 +84,7 @@ export default function BoNew() {
       const results = await protheusService.searchBOs(search)
       setSearchResults(results)
     } catch (err: any) {
-      setErrorMsg('Erro ao buscar no Protheus.')
+      setErrorMsg(err.message || 'Erro ao buscar no Protheus.')
     } finally {
       setIsSearching(false)
     }
@@ -58,7 +99,7 @@ export default function BoNew() {
       .from('bo_records')
       .select('id')
       .eq('bo_number', bo.bo_number)
-      .eq('is_deleted', false)
+      .or('d_e_l_e_t_.neq.*,d_e_l_e_t_.is.null')
       .single()
 
     if (existingBo) {
@@ -67,16 +108,17 @@ export default function BoNew() {
       return
     }
 
-    try {
-      const items = await protheusService.getBOItems(bo.bo_number)
-      setBoItems(items)
-    } catch (err) {
-      setErrorMsg('Erro ao buscar os itens do BO.')
-    }
+    setBoItems(bo.items)
+    setItemMotives({})
+    setCustomItemMotives({})
   }
 
   const onSubmit = async (data: FormData) => {
-    if (!selectedBo || !profile) return
+    const userModule = profile?.module?.trim()
+    if (!selectedBo || !userModule) {
+      setErrorMsg('Não foi possível identificar o módulo do usuário logado.')
+      return
+    }
     setIsSaving(true)
     setErrorMsg(null)
 
@@ -95,8 +137,7 @@ export default function BoNew() {
           setor_responsavel: data.setor_responsavel,
           frete: data.frete,
           descricao: data.descricao,
-          modulo: profile.module,
-          user_include: profile.id,
+          modulo: userModule,
           status: 'Em Andamento'
         })
         .select()
@@ -106,13 +147,12 @@ export default function BoNew() {
 
       // Inserir Itens
       if (boItems.length > 0) {
-        const itemsToInsert = boItems.map(item => ({
-          bo_id: insertedBo.id,
+        const itemsToInsert = boItems.map((item, index) => ({
+          bo_ref: selectedBo.bo_number,
           cod: item.cod,
           desc: item.desc,
           linha: item.linha,
-          // Em uma versão mais completa, o motivo seria coletado por item no formulário
-          motivo: 'Não especificado' 
+          motivo: customItemMotives[index] || itemMotives[index] || data.tipo_ocorrencia
         }))
 
         const { error: itemsError } = await supabase
@@ -134,7 +174,7 @@ export default function BoNew() {
   }
 
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+    <div className="bo-new-page" style={{ width: '100%', maxWidth: '1500px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div>
         <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>Acompanhar Novo BO</h1>
         <p style={{ color: 'var(--text-secondary)' }}>Busque um Boletim de Ocorrência no ERP Protheus para iniciar o acompanhamento.</p>
@@ -148,8 +188,8 @@ export default function BoNew() {
 
       {/* Fase 1: Busca */}
       {!selectedBo && (
-        <div style={{ background: 'var(--surface-color)', padding: '2rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--surface-border)', boxShadow: 'var(--shadow-sm)' }}>
-          <form onSubmit={handleSearch} style={{ display: 'flex', gap: '1rem', marginBottom: '2rem' }}>
+        <div className="bo-new-panel" style={{ background: 'var(--surface-color)', padding: '1.5rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--surface-border)', boxShadow: 'var(--shadow-sm)' }}>
+          <form onSubmit={handleSearch} style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
             <input 
               type="text" 
               placeholder="Digite o número do BO, OP ou Cliente..." 
@@ -168,11 +208,11 @@ export default function BoNew() {
 
           {searchResults.length > 0 && (
             <div>
-              <h3 style={{ marginBottom: '1rem', fontWeight: 600 }}>Resultados encontrados:</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <h3 style={{ marginBottom: '1rem', fontWeight: 600 }}>BOs disponíveis ({searchResults.length})</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: 'calc(100vh - 20rem)', overflowY: 'auto', paddingRight: '0.5rem' }}>
                 {searchResults.map(bo => (
-                  <div key={bo.bo_number} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)', background: '#fff' }}>
-                    <div>
+                  <div key={bo.bo_number} className="bo-result-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', padding: '1rem', border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)', background: '#fff' }}>
+                    <div style={{ minWidth: 0 }}>
                       <strong>{bo.bo_number}</strong> - {bo.nome_cliente}
                       <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>OP: {bo.op} | Filial: {bo.filial}</div>
                     </div>
@@ -192,9 +232,9 @@ export default function BoNew() {
 
       {/* Fase 2: Complemento de Dados */}
       {selectedBo && (
-        <div style={{ background: 'var(--surface-color)', padding: '2rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--surface-border)', boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem', paddingBottom: '1rem', borderBottom: '1px solid var(--surface-border)' }}>
-            <div>
+        <div className="bo-new-panel" style={{ background: 'var(--surface-color)', padding: '1.5rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--surface-border)', boxShadow: 'var(--shadow-sm)' }}>
+          <div className="bo-selected-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '2rem', paddingBottom: '1rem', borderBottom: '1px solid var(--surface-border)' }}>
+            <div style={{ minWidth: 0 }}>
               <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--primary-color)' }}>{selectedBo.bo_number}</h2>
               <p style={{ color: 'var(--text-secondary)' }}>Cliente: {selectedBo.nome_cliente}</p>
             </div>
@@ -207,37 +247,19 @@ export default function BoNew() {
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+            <div className="bo-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1.5rem' }}>
               <div className="form-group">
-                <label>Tipo de Ocorrência</label>
-                <select {...register('tipo_ocorrencia')} style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1' }}>
-                  <option value="">Selecione...</option>
-                  <option value="Avaria Produtiva">Avaria Produtiva</option>
-                  <option value="Assistência Técnica">Assistência Técnica</option>
-                  <option value="Falta de Material">Falta de Material</option>
-                </select>
+                <SearchSelectModal label="Tipo de Ocorrência" value={occurrence || ''} placeholder="Selecione..." options={occurrenceOptions} onChange={value => setValue('tipo_ocorrencia', value, { shouldValidate: true })} />
                 {errors.tipo_ocorrencia && <span style={{ color: 'var(--error-color)', fontSize: '0.8rem' }}>{errors.tipo_ocorrencia.message}</span>}
               </div>
 
               <div className="form-group">
-                <label>Setor Responsável</label>
-                <select {...register('setor_responsavel')} style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1' }}>
-                  <option value="">Selecione...</option>
-                  <option value="Produção">Produção</option>
-                  <option value="Qualidade">Qualidade</option>
-                  <option value="Comercial">Comercial</option>
-                  <option value="Logística">Logística</option>
-                </select>
+                <SearchSelectModal label="Setor Responsável" value={sector || ''} placeholder="Selecione..." options={sectorOptions} onChange={value => setValue('setor_responsavel', value, { shouldValidate: true })} />
                 {errors.setor_responsavel && <span style={{ color: 'var(--error-color)', fontSize: '0.8rem' }}>{errors.setor_responsavel.message}</span>}
               </div>
 
               <div className="form-group">
-                <label>Frete</label>
-                <select {...register('frete')} style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1' }}>
-                  <option value="">Selecione...</option>
-                  <option value="CIF">CIF</option>
-                  <option value="FOB">FOB</option>
-                </select>
+                <SearchSelectModal label="Frete" value={freight || ''} placeholder="Selecione..." options={['CIF', 'FOB']} onChange={value => setValue('frete', value, { shouldValidate: true })} />
                 {errors.frete && <span style={{ color: 'var(--error-color)', fontSize: '0.8rem' }}>{errors.frete.message}</span>}
               </div>
             </div>
@@ -249,6 +271,38 @@ export default function BoNew() {
                 rows={3} 
                 style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1', resize: 'vertical' }}
               />
+            </div>
+
+            <div className="bo-items-section" style={{ borderTop: '1px solid var(--surface-border)', paddingTop: '1.5rem' }}>
+              <h3 style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>Itens da BO e motivos</h3>
+              {boItems.length === 0 ? (
+                <p style={{ color: 'var(--text-muted)' }}>Esta BO não possui itens cadastrados.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '360px', overflowY: 'auto', paddingRight: '0.5rem' }}>
+                  {boItems.map((item, index) => (
+                    <div key={`${item.cod}-${index}`} className="bo-item-row" style={{ display: 'grid', gridTemplateColumns: 'minmax(70px, 100px) minmax(0, 1fr) minmax(220px, 1fr)', gap: '1rem', alignItems: 'center', padding: '0.75rem', border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)' }}>
+                      <strong style={{ overflowWrap: 'anywhere' }}>{item.cod}</strong>
+                      <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                        <div>{item.desc}</div>
+                        <small style={{ color: 'var(--text-secondary)' }}>{item.linha}</small>
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor={`motivo-${index}`}>Motivo</label>
+                        <SearchSelectModal label="Motivo" value={itemMotives[index] || ''} placeholder="Usar tipo selecionado" options={motivoOptions} onChange={value => {
+                          setItemMotives(prev => ({ ...prev, [index]: value }))
+                          setCustomItemMotives(prev => ({ ...prev, [index]: '' }))
+                        }} />
+                        <input
+                          type="text"
+                          value={customItemMotives[index] || ''}
+                          onChange={event => setCustomItemMotives(prev => ({ ...prev, [index]: event.target.value }))}
+                          placeholder="Ou insira um novo motivo"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>

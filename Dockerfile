@@ -26,8 +26,8 @@ RUN npm run build
 # Etapa 2: Servir com Nginx
 FROM nginx:alpine
 
-# Copiar configuração personalizada do Nginx para suportar React Router (SPA)
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copiar template do Nginx. A imagem oficial substitui PROTHEUS_API_KEY ao iniciar.
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 
 # Copiar os arquivos compilados da etapa de build
 COPY --from=build /app/dist /usr/share/nginx/html

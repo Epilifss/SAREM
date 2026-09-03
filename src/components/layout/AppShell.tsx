@@ -1,43 +1,52 @@
-import { Outlet, Link } from 'react-router-dom'
+import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../providers/AuthProvider'
 
 export default function AppShell() {
   const { profile, signOut } = useAuth()
+  const { pathname } = useLocation()
+  const linkStyle = (isActive: boolean) => ({
+    padding: '0.75rem',
+    borderRadius: 'var(--radius-md)',
+    textDecoration: 'none',
+    color: isActive ? 'var(--primary-color)' : 'var(--text-secondary)',
+    fontWeight: 500,
+    background: isActive ? 'rgba(79, 70, 229, 0.1)' : 'transparent',
+  })
+  const isBoListActive = pathname === '/bos' || (pathname.startsWith('/bos/') && pathname !== '/bos/new')
 
   return (
     <div className="app-container">
-      {/* TODO: Transform this into a proper Sidebar component */}
-      <aside style={{ width: '260px', background: 'var(--surface-color)', borderRight: '1px solid var(--surface-border)', padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ marginBottom: '2rem' }}>
-          <h1 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--primary-color)' }}>SAREM Web</h1>
+      <aside className="app-sidebar">
+        <div className="app-brand">
+          <img src="/favicon.svg" alt="SAREM" />
+          <span>SAREM</span>
         </div>
         
-        <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          <Link to="/" style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', textDecoration: 'none', color: 'var(--text-primary)', fontWeight: 500, background: 'rgba(79, 70, 229, 0.1)' }}>Dashboard</Link>
-          <Link to="/bos" style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', textDecoration: 'none', color: 'var(--text-secondary)', fontWeight: 500 }}>Boletins</Link>
+        <nav className="app-nav">
+          <NavLink to="/" end style={({ isActive }) => linkStyle(isActive)}>Dashboard</NavLink>
+          <NavLink to="/bos" style={() => linkStyle(isBoListActive)}>Boletins</NavLink>
           {profile?.can_track_bo && (
-            <Link to="/bos/new" style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', textDecoration: 'none', color: 'var(--text-secondary)', fontWeight: 500 }}>Acompanhar BO</Link>
+            <NavLink to="/bos/new" style={() => linkStyle(pathname === '/bos/new')}>Acompanhar BO</NavLink>
           )}
           {profile?.is_admin && (
-            <Link to="/admin/users" style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', textDecoration: 'none', color: 'var(--text-secondary)', fontWeight: 500, marginTop: '1rem', borderTop: '1px solid var(--surface-border)' }}>Gestão de Usuários</Link>
+            <NavLink to="/admin/users" style={({ isActive }) => ({ ...linkStyle(isActive), marginTop: '1rem', borderTop: '1px solid var(--surface-border)' })}>Gestão de Usuários</NavLink>
           )}
         </nav>
 
-        <div style={{ paddingTop: '1rem', borderTop: '1px solid var(--surface-border)', marginTop: 'auto' }}>
-          <div style={{ marginBottom: '1rem' }}>
+        <div className="app-user-panel">
+          <div className="app-user-details">
             <p style={{ fontSize: '0.875rem', fontWeight: 600 }}>{profile?.username}</p>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Módulo: {profile?.module}</p>
           </div>
-          <button 
+          <button className="app-signout"
             onClick={signOut}
-            style={{ width: '100%', padding: '0.5rem', background: 'transparent', border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', color: 'var(--text-secondary)' }}
           >
             Sair
           </button>
         </div>
       </aside>
 
-      <main style={{ flex: 1, padding: '2rem', overflowY: 'auto' }}>
+      <main className="app-main">
         <Outlet />
       </main>
     </div>

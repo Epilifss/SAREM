@@ -39,7 +39,8 @@ export default function AuthPage() {
     <div className="auth-container">
       <div className="auth-card">
         <div className="auth-header">
-          <h2>SAREM Web</h2>
+          <img src="/favicon.svg" alt="SAREM" className="auth-logo" />
+          <h2>SAREM</h2>
           <p>Faça login para continuar</p>
         </div>
 

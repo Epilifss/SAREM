@@ -7,6 +7,7 @@ import { useAuth } from '../providers/AuthProvider'
 
 export default function BoList() {
   const [bos, setBos] = useState<BoRecord[]>([])
+  const [itemCounts, setItemCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
   const { profile } = useAuth()
@@ -17,8 +18,8 @@ export default function BoList() {
   const [filterDateEnd, setFilterDateEnd] = useState('')
 
   useEffect(() => {
-    fetchBOs()
-  }, []) // initial load
+    if (profile) fetchBOs()
+  }, [profile])
 
   const fetchBOs = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
@@ -27,9 +28,13 @@ export default function BoList() {
     let query = supabase
       .from('bo_records')
       .select('*')
-      .eq('is_deleted', false)
+      .or('d_e_l_e_t_.neq.*,d_e_l_e_t_.is.null')
       .order('created_at', { ascending: false })
       .limit(100)
+
+    if (profile && profile.module !== 'Todos' && !profile.is_admin) {
+      query = query.eq('modulo', profile.module)
+    }
 
     if (filterStatus) {
       query = query.eq('status', filterStatus)
@@ -54,6 +59,20 @@ export default function BoList() {
       console.error('Error fetching BOs:', error.message)
     } else {
       setBos(data as BoRecord[])
+      const { data: itemRows, error: itemsError } = await supabase
+        .from('bo_itens')
+        .select('bo_ref')
+
+      if (itemsError) {
+        console.error('Error fetching BO item counts:', itemsError.message)
+      } else {
+        const counts = (itemRows || []).reduce<Record<string, number>>((result, item) => {
+          const key = item.bo_ref?.trim()
+          if (key) result[key] = (result[key] || 0) + 1
+          return result
+        }, {})
+        setItemCounts(counts)
+      }
     }
     setLoading(false)
   }
@@ -63,6 +82,7 @@ export default function BoList() {
     { header: 'OP', accessor: 'op' as keyof BoRecord },
     { header: 'Loja', accessor: 'loja' as keyof BoRecord },
     { header: 'Tipo Ocorrência', accessor: 'tipo_ocorrencia' as keyof BoRecord },
+    { header: 'Itens', accessor: (row: BoRecord) => itemCounts[row.bo_number.trim()] || 0 },
     { header: 'Status', accessor: (row: BoRecord) => (
         <span style={{ 
           fontSize: '0.8rem', padding: '0.2rem 0.5rem', borderRadius: '12px',
@@ -79,7 +99,7 @@ export default function BoList() {
   ]
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div style={{ width: '100%', maxWidth: '1500px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>Boletins de Ocorrência</h1>
@@ -157,12 +177,14 @@ export default function BoList() {
         </form>
       </div>
 
-      <DataTable 
-        data={bos} 
-        columns={columns} 
-        isLoading={loading} 
-        onRowClick={(row) => navigate(`/bos/${row.id}`)}
-      />
+      <div style={{ maxHeight: 'calc(100vh - 22rem)', minHeight: '260px', overflowY: 'auto', borderRadius: 'var(--radius-lg)' }}>
+        <DataTable 
+          data={bos} 
+          columns={columns} 
+          isLoading={loading} 
+          onRowClick={(row) => navigate(`/bos/${row.id}`)}
+        />
+      </div>
     </div>
   )
 }

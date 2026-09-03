@@ -1,3 +1,5 @@
+import { supabase } from '../../lib/supabase'
+
 export type ProtheusBOItem = {
   bo_number: string;
   cod: string;
@@ -12,41 +14,92 @@ export type ProtheusBO = {
   filial: string;
   emissao_totvs: string; // YYYY-MM-DD
   previsao_entrega: string; // YYYY-MM-DD
+  items: ProtheusBOItem[]
 }
 
-// SIMULANDO BANCO PROTHEUS E SUAS RESPOSTAS
-const MOCK_PROTHEUS_BOS: ProtheusBO[] = [
-  { bo_number: 'BO00123', op: '001001', nome_cliente: 'CLIENTE A', filial: 'TIDELLI', emissao_totvs: '2023-10-01', previsao_entrega: '2023-10-15' },
-  { bo_number: 'BO00124', op: '001002', nome_cliente: 'CLIENTE B', filial: 'NAUTICA', emissao_totvs: '2023-10-02', previsao_entrega: '2023-10-20' },
-  { bo_number: 'BO00125', op: '001003', nome_cliente: 'CLIENTE C', filial: 'TIDELLI', emissao_totvs: '2023-10-05', previsao_entrega: '2023-11-01' },
-];
+type ProtheusApiItem = {
+  C6_ITEM: string
+  C6_CODTIDI: string
+  C6_DESCRI: string
+  C6_LINHA: string
+}
 
-const MOCK_PROTHEUS_ITEMS: ProtheusBOItem[] = [
-  { bo_number: 'BO00123', cod: 'IT001', desc: 'MESA REDONDA', linha: 'EXTERNA' },
-  { bo_number: 'BO00123', cod: 'IT002', desc: 'CADEIRA ACO', linha: 'EXTERNA' },
-  { bo_number: 'BO00124', cod: 'IT003', desc: 'SOFA RECLINAVEL', linha: 'INTERNA' },
-];
+type ProtheusApiBO = {
+  C5_PEDREPR: string
+  C5_NUM: string
+  C5_NOME: string
+  FILIAL: string
+  EMISSAO: string
+  PREVISAO_ENTREGA: string
+  ITENS?: ProtheusApiItem[]
+}
+
+const API_URL = '/api/protheus/bos'
+
+function parseDate(date: string): string {
+  const [day, month, year] = date.split('/')
+  return year && month && day ? `${year}-${month}-${day}` : date
+}
+
+function mapBO(bo: ProtheusApiBO): ProtheusBO {
+  const boNumber = bo.C5_PEDREPR.trim()
+  return {
+    bo_number: boNumber,
+    op: bo.C5_NUM.trim(),
+    nome_cliente: bo.C5_NOME.trim(),
+    filial: bo.FILIAL.trim(),
+    emissao_totvs: parseDate(bo.EMISSAO.trim()),
+    previsao_entrega: parseDate(bo.PREVISAO_ENTREGA.trim()),
+    items: (bo.ITENS || []).map(item => ({
+      bo_number: boNumber,
+      cod: item.C6_CODTIDI.trim(),
+      desc: item.C6_DESCRI.trim(),
+      linha: item.C6_LINHA.trim(),
+    })),
+  }
+}
 
 export const protheusService = {
   
-  async searchBOs(termo: string): Promise<ProtheusBO[]> {
-    // Simula delay de rede
-    await new Promise(r => setTimeout(r, 600));
-    const upperTerm = termo.toUpperCase();
-    return MOCK_PROTHEUS_BOS.filter(bo => 
+  async searchBOs(termo = ''): Promise<ProtheusBO[]> {
+    const response = await fetch(API_URL)
+    if (!response.ok) {
+      throw new Error(`Erro ao consultar o Protheus (${response.status})`)
+    }
+
+    const payload = await response.json() as ProtheusApiBO | ProtheusApiBO[]
+    const apiBos = Array.isArray(payload) ? payload : [payload]
+    const bos = apiBos.map(mapBO)
+    const { data: trackedBos, error } = await supabase
+      .from('bo_records')
+      .select('bo_number')
+
+    if (error) throw error
+
+    const trackedNumbers = new Set((trackedBos || []).map(bo => bo.bo_number.trim().toUpperCase()))
+    const upperTerm = termo.trim().toUpperCase()
+    return bos.filter(bo => !trackedNumbers.has(bo.bo_number.toUpperCase())).filter(bo =>
       bo.bo_number.includes(upperTerm) || 
       bo.op.includes(upperTerm) ||
       bo.nome_cliente.toUpperCase().includes(upperTerm)
-    );
+    )
   },
 
   async getBOItems(boNumber: string): Promise<ProtheusBOItem[]> {
-    await new Promise(r => setTimeout(r, 400));
-    return MOCK_PROTHEUS_ITEMS.filter(item => item.bo_number === boNumber);
+    const response = await fetch(API_URL)
+    if (!response.ok) throw new Error(`Erro ao consultar itens no Protheus (${response.status})`)
+    const payload = await response.json() as ProtheusApiBO | ProtheusApiBO[]
+    const apiBos = Array.isArray(payload) ? payload : [payload]
+    const bo = apiBos.find(item => item.C5_PEDREPR.trim() === boNumber.trim())
+    return bo ? mapBO(bo).items : []
   },
 
   async getBODetails(boNumber: string): Promise<ProtheusBO | null> {
-    await new Promise(r => setTimeout(r, 300));
-    return MOCK_PROTHEUS_BOS.find(bo => bo.bo_number === boNumber) || null;
+    const response = await fetch(API_URL)
+    if (!response.ok) throw new Error(`Erro ao consultar detalhes no Protheus (${response.status})`)
+    const payload = await response.json() as ProtheusApiBO | ProtheusApiBO[]
+    const apiBos = Array.isArray(payload) ? payload : [payload]
+    const bo = apiBos.find(item => item.C5_PEDREPR.trim() === boNumber.trim())
+    return bo ? mapBO(bo) : null
   }
 }

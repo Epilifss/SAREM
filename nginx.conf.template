@@ -1,0 +1,26 @@
+server {
+    listen 80;
+    server_name localhost;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location /api/protheus/bos {
+        proxy_pass http://api.tidelli.com.br/pedidos/bos;
+        proxy_set_header X-API-Key "${PROTHEUS_API_KEY}";
+        proxy_set_header Host api.tidelli.com.br;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
+        expires 1y;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    location ~ /\. {
+        deny all;
+    }
+}
