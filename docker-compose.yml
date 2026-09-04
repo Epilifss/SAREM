@@ -11,5 +11,5 @@ services:
       NGINX_ENVSUBST_VARS: '$PROTHEUS_API_KEY'
     container_name: sarem_web
     ports:
-      - "80:80"
+      - "82:82"
     restart: unless-stopped

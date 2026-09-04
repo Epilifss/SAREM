@@ -32,8 +32,8 @@ COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 # Copiar os arquivos compilados da etapa de build
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Expor porta 80
-EXPOSE 80
+# Expor porta 82
+EXPOSE 82
 
 # Iniciar o Nginx
 CMD ["nginx", "-g", "daemon off;"]
