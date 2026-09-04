@@ -1,0 +1,23 @@
+# Configuracao local do Supabase.
+# Todas as portas foram deslocadas para a faixa 56xxx.
+
+project_id = "sarem"
+
+[api]
+port = 56001
+
+[db]
+port = 56002
+shadow_port = 56020
+
+[studio]
+port = 56003
+
+[inbucket]
+port = 56004
+
+[analytics]
+port = 56007
+
+[db.pooler]
+port = 56009
