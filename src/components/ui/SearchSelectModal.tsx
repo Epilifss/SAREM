@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 type SearchSelectModalProps = {
   label: string
@@ -10,55 +10,57 @@ type SearchSelectModalProps = {
 
 export function SearchSelectModal({ label, value, placeholder, options, onChange }: SearchSelectModalProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [search, setSearch] = useState('')
+  const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!isOpen) setSearch('')
-  }, [isOpen])
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) setIsOpen(false)
+    }
 
-  const filteredOptions = options.filter(option => option.toLocaleLowerCase().includes(search.toLocaleLowerCase()))
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [])
+
+  const filteredOptions = options
+    .filter(option => option.toLocaleLowerCase().includes(value.toLocaleLowerCase()))
+    .slice(0, 8)
 
   return (
-    <div className="search-select">
+    <div className="search-select" ref={containerRef}>
       <label>{label}</label>
-      <button type="button" className="search-select-trigger" onClick={() => setIsOpen(true)}>
-        <span className={value ? '' : 'search-select-placeholder'}>{value || placeholder}</span>
-        <span aria-hidden="true">⌄</span>
-      </button>
+      <input
+        type="text"
+        value={value}
+        onFocus={() => setIsOpen(true)}
+        onChange={event => {
+          onChange(event.target.value)
+          setIsOpen(true)
+        }}
+        placeholder={placeholder}
+        role="combobox"
+        aria-expanded={isOpen}
+        aria-autocomplete="list"
+        autoComplete="off"
+      />
 
       {isOpen && (
-        <div className="search-select-backdrop" role="presentation" onMouseDown={() => setIsOpen(false)}>
-          <div className="search-select-modal" role="dialog" aria-modal="true" aria-label={label} onMouseDown={event => event.stopPropagation()}>
-            <div className="search-select-modal-header">
-              <h3>{label}</h3>
-              <button type="button" className="search-select-close" onClick={() => setIsOpen(false)} aria-label="Fechar">×</button>
-            </div>
-            <input
-              autoFocus
-              type="search"
-              value={search}
-              onChange={event => setSearch(event.target.value)}
-              placeholder={`Pesquisar ${label.toLocaleLowerCase()}`}
-            />
-            <div className="search-select-options">
-              {filteredOptions.length === 0 ? (
-                <p className="search-select-empty">Nenhuma opção encontrada.</p>
-              ) : filteredOptions.map(option => (
-                <button
-                  type="button"
-                  className={`search-select-option${option === value ? ' selected' : ''}`}
-                  key={option}
-                  onClick={() => {
-                    onChange(option)
-                    setIsOpen(false)
-                  }}
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
+        <div className="search-select-options" role="listbox">
+          {filteredOptions.length === 0 ? (
+            <p className="search-select-empty">Nenhuma sugestão encontrada.</p>
+          ) : filteredOptions.map(option => (
+            <button
+              type="button"
+              className={`search-select-option${option === value ? ' selected' : ''}`}
+              key={option}
+              onClick={() => {
+                onChange(option)
+                setIsOpen(false)
+              }}
+            >
+              {option}
+            </button>
+          ))}
           </div>
-        </div>
       )}
     </div>
   )

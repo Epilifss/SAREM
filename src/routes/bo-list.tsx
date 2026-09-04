@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import type { BoRecord } from '../types'
 import { DataTable } from '../components/ui/DataTable'
 import { useAuth } from '../providers/AuthProvider'
+import { logApplicationError } from '../services/errorLogger'
 
 export default function BoList() {
   const [bos, setBos] = useState<BoRecord[]>([])
@@ -21,7 +22,7 @@ export default function BoList() {
     if (profile) fetchBOs()
   }, [profile])
 
-  const fetchBOs = async (e?: React.FormEvent) => {
+  const fetchBOs = async (e?: React.FormEvent, filters = { filterTerm, filterStatus, filterDateStart, filterDateEnd }) => {
     if (e) e.preventDefault()
     setLoading(true)
 
@@ -36,20 +37,20 @@ export default function BoList() {
       query = query.eq('modulo', profile.module)
     }
 
-    if (filterStatus) {
-      query = query.eq('status', filterStatus)
+    if (filters.filterStatus) {
+      query = query.eq('status', filters.filterStatus)
     }
 
-    if (filterDateStart) {
-      query = query.gte('emissao_totvs', filterDateStart)
+    if (filters.filterDateStart) {
+      query = query.gte('emissao_totvs', filters.filterDateStart)
     }
 
-    if (filterDateEnd) {
-      query = query.lte('emissao_totvs', filterDateEnd)
+    if (filters.filterDateEnd) {
+      query = query.lte('emissao_totvs', filters.filterDateEnd)
     }
 
-    if (filterTerm) {
-      const term = filterTerm.trim()
+    if (filters.filterTerm) {
+      const term = filters.filterTerm.trim()
       query = query.or(`bo_number.ilike.%${term}%,op.ilike.%${term}%,loja.ilike.%${term}%`)
     }
 
@@ -57,6 +58,7 @@ export default function BoList() {
 
     if (error) {
       console.error('Error fetching BOs:', error.message)
+      void logApplicationError(error, { source: 'BoList.fetchBOs' })
     } else {
       setBos(data as BoRecord[])
       const { data: itemRows, error: itemsError } = await supabase
@@ -65,6 +67,7 @@ export default function BoList() {
 
       if (itemsError) {
         console.error('Error fetching BO item counts:', itemsError.message)
+        void logApplicationError(itemsError, { source: 'BoList.fetchItemCounts' })
       } else {
         const counts = (itemRows || []).reduce<Record<string, number>>((result, item) => {
           const key = item.bo_ref?.trim()
@@ -128,7 +131,11 @@ export default function BoList() {
               type="text" 
               placeholder="BO, OP ou Loja..." 
               value={filterTerm}
-              onChange={e => setFilterTerm(e.target.value)}
+              onChange={e => {
+                const value = e.target.value
+                setFilterTerm(value)
+                fetchBOs(undefined, { filterTerm: value, filterStatus, filterDateStart, filterDateEnd })
+              }}
               style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1' }}
             />
           </div>
@@ -137,7 +144,11 @@ export default function BoList() {
             <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-secondary)' }}>Status</label>
             <select 
               value={filterStatus}
-              onChange={e => setFilterStatus(e.target.value)}
+              onChange={e => {
+                const value = e.target.value
+                setFilterStatus(value)
+                fetchBOs(undefined, { filterTerm, filterStatus: value, filterDateStart, filterDateEnd })
+              }}
               style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1' }}
             >
               <option value="">Todos</option>
@@ -153,7 +164,11 @@ export default function BoList() {
             <input 
               type="date" 
               value={filterDateStart}
-              onChange={e => setFilterDateStart(e.target.value)}
+              onChange={e => {
+                const value = e.target.value
+                setFilterDateStart(value)
+                fetchBOs(undefined, { filterTerm, filterStatus, filterDateStart: value, filterDateEnd })
+              }}
               style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1' }}
             />
           </div>
@@ -163,7 +178,11 @@ export default function BoList() {
             <input 
               type="date" 
               value={filterDateEnd}
-              onChange={e => setFilterDateEnd(e.target.value)}
+              onChange={e => {
+                const value = e.target.value
+                setFilterDateEnd(value)
+                fetchBOs(undefined, { filterTerm, filterStatus, filterDateStart, filterDateEnd: value })
+              }}
               style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1' }}
             />
           </div>

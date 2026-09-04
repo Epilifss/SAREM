@@ -7,6 +7,8 @@ import BoList from './routes/bo-list'
 import BoNew from './routes/bo-new'
 import BoDetail from './routes/bo-detail'
 import AdminUsers from './routes/admin-users'
+import ProfilePage from './routes/profile'
+import AdminErrorLogs from './routes/admin-error-logs'
 
 
 
@@ -23,6 +25,8 @@ function App() {
         <Route path="bos/new" element={<BoNew />} />
         <Route path="bos/:id" element={<BoDetail />} />
         <Route path="admin/users" element={<AdminUsers />} />
+        <Route path="admin/error-logs" element={<AdminErrorLogs />} />
+        <Route path="profile" element={<ProfilePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

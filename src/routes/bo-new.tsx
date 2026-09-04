@@ -8,6 +8,8 @@ import type { ProtheusBO, ProtheusBOItem } from '../services/protheus/protheusSe
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../providers/AuthProvider'
 import { SearchSelectModal } from '../components/ui/SearchSelectModal'
+import { logApplicationError } from '../services/errorLogger'
+import { ErrorModal } from '../components/ui/ErrorModal'
 
 const formSchema = z.object({
   tipo_ocorrencia: z.string().min(1, 'Selecione o tipo de ocorrência'),
@@ -65,6 +67,7 @@ export default function BoNew() {
         setSectorOptions(unique(sectorValues))
         setMotivoOptions(unique(motiveValues))
       } catch (err: any) {
+        void logApplicationError(err, { source: 'BoNew.loadInitialData' })
         setErrorMsg(err.message || 'Erro ao carregar os BOs do Protheus.')
       } finally {
         setIsSearching(false)
@@ -74,16 +77,16 @@ export default function BoNew() {
     loadInitialData()
   }, [])
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!search.trim()) return
+  const handleSearch = async (e?: React.FormEvent, value = search) => {
+    e?.preventDefault()
 
     setIsSearching(true)
     setErrorMsg(null)
     try {
-      const results = await protheusService.searchBOs(search)
+      const results = await protheusService.searchBOs(value)
       setSearchResults(results)
     } catch (err: any) {
+      void logApplicationError(err, { source: 'BoNew.handleSearch' })
       setErrorMsg(err.message || 'Erro ao buscar no Protheus.')
     } finally {
       setIsSearching(false)
@@ -140,10 +143,27 @@ export default function BoNew() {
           modulo: userModule,
           status: 'Em Andamento'
         })
-        .select()
+        .select('id')
         .single()
 
       if (boError) throw boError
+      let boId = insertedBo?.id
+
+      if (boId == null) {
+        const { data: createdBo, error: lookupError } = await supabase
+          .from('bo_records')
+          .select('id')
+          .eq('bo_number', selectedBo.bo_number)
+          .eq('modulo', userModule)
+          .order('id', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (lookupError) throw lookupError
+        boId = createdBo?.id
+      }
+
+      if (boId == null) throw new Error('A BO foi criada, mas não foi possível identificar seu ID.')
 
       // Inserir Itens
       if (boItems.length > 0) {
@@ -163,10 +183,11 @@ export default function BoNew() {
       }
 
       // Sucesso!
-      navigate(`/bos/${insertedBo.id}`)
+      navigate(`/bos/${boId}`)
 
     } catch (err: any) {
       console.error(err)
+      void logApplicationError(err, { source: 'BoNew.onSubmit' })
       setErrorMsg(err.message || 'Erro ao iniciar o acompanhamento do BO.')
     } finally {
       setIsSaving(false)
@@ -176,15 +197,10 @@ export default function BoNew() {
   return (
     <div className="bo-new-page" style={{ width: '100%', maxWidth: '1500px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div>
+        <ErrorModal message={errorMsg} onClose={() => setErrorMsg(null)} />
         <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>Acompanhar Novo BO</h1>
         <p style={{ color: 'var(--text-secondary)' }}>Busque um Boletim de Ocorrência no ERP Protheus para iniciar o acompanhamento.</p>
       </div>
-
-      {errorMsg && (
-        <div style={{ padding: '1rem', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--error-color)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(239,68,68,0.2)' }}>
-          {errorMsg}
-        </div>
-      )}
 
       {/* Fase 1: Busca */}
       {!selectedBo && (
@@ -194,7 +210,11 @@ export default function BoNew() {
               type="text" 
               placeholder="Digite o número do BO, OP ou Cliente..." 
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => {
+                const value = e.target.value
+                setSearch(value)
+                handleSearch(undefined, value)
+              }}
               style={{ flex: 1, padding: '0.875rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1' }}
             />
             <button 

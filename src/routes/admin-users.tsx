@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabase'
 import type { Profile } from '../types'
 import { DataTable } from '../components/ui/DataTable'
 import { useAuth } from '../providers/AuthProvider'
+import { ErrorModal } from '../components/ui/ErrorModal'
+import { logApplicationError } from '../services/errorLogger'
 
 export default function AdminUsers() {
   const [users, setUsers] = useState<Profile[]>([])
@@ -10,6 +12,8 @@ export default function AdminUsers() {
   const { profile } = useAuth()
   const [isCreating, setIsCreating] = useState(false)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [editingUser, setEditingUser] = useState<Profile | null>(null)
+  const [isEditingUser, setIsEditingUser] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [createSuccess, setCreateSuccess] = useState<string | null>(null)
   const [newUser, setNewUser] = useState({
@@ -51,6 +55,9 @@ export default function AdminUsers() {
 
     if (!error) {
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, [field]: !currentValue } : u))
+    } else {
+      void logApplicationError(error, { source: 'AdminUsers.handleToggle' })
+      setCreateError(error.message)
     }
   }
 
@@ -62,7 +69,38 @@ export default function AdminUsers() {
 
     if (!error) {
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, module: newModule } : u))
+    } else {
+      void logApplicationError(error, { source: 'AdminUsers.handleModuleChange' })
+      setCreateError(error.message)
     }
+  }
+
+  const handleEditUser = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!editingUser) return
+    setIsEditingUser(true)
+    setCreateError(null)
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        username: editingUser.username.trim(),
+        module: editingUser.module,
+        is_admin: editingUser.is_admin,
+        can_edit_bo: editingUser.can_edit_bo,
+        can_delete_bo: editingUser.can_delete_bo,
+        can_track_bo: editingUser.can_track_bo,
+      })
+      .eq('id', editingUser.id)
+
+    if (error) {
+      void logApplicationError(error, { source: 'AdminUsers.handleEditUser' })
+      setCreateError(error.message)
+    } else {
+      setUsers(prev => prev.map(user => user.id === editingUser.id ? editingUser : user))
+      setEditingUser(null)
+    }
+    setIsEditingUser(false)
   }
 
   const handleCreateUser = async (event: FormEvent) => {
@@ -110,6 +148,7 @@ export default function AdminUsers() {
       setNewUser({ username: '', email: '', password: '', module: 'Corporativo', is_admin: false, can_edit_bo: true, can_delete_bo: true, can_track_bo: true })
       fetchUsers()
     } catch (err: any) {
+      void logApplicationError(err, { source: 'AdminUsers.handleCreateUser' })
       setCreateError(err.message || 'Erro ao criar usuário.')
     } finally {
       setIsCreating(false)
@@ -117,7 +156,7 @@ export default function AdminUsers() {
   }
 
   const columns = [
-    { header: 'Usuário', accessor: 'username' as keyof Profile },
+    { header: 'Usuário', accessor: (row: Profile) => <button className="table-link-button" type="button" onClick={() => setEditingUser({ ...row })}>{row.username}</button> },
     { header: 'Módulo', accessor: (row: Profile) => (
       <select 
         value={row.module} 
@@ -147,6 +186,7 @@ export default function AdminUsers() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      <ErrorModal message={createError} onClose={() => setCreateError(null)} />
       <div>
         <div className="page-heading-row">
           <div>
@@ -180,6 +220,22 @@ export default function AdminUsers() {
           </div>
           <button className="auth-button admin-create-button" type="submit" disabled={isCreating}>{isCreating ? 'Criando...' : 'Criar usuário'}</button>
         </form>
+        </section>
+      </div>}
+
+      {editingUser && <div className="modal-backdrop" role="presentation" onMouseDown={() => !isEditingUser && setEditingUser(null)}>
+        <section className="admin-create-panel user-create-modal" role="dialog" aria-modal="true" aria-labelledby="edit-user-title" onMouseDown={event => event.stopPropagation()}>
+          <div className="dashboard-panel-heading">
+            <div><h2 id="edit-user-title">Editar usuário</h2><p>Altere os dados e as permissões de {editingUser.username}.</p></div>
+            <button className="modal-close" type="button" onClick={() => setEditingUser(null)} disabled={isEditingUser} aria-label="Fechar">×</button>
+          </div>
+          {createError && <div className="dashboard-error">{createError}</div>}
+          <form className="admin-edit-form" onSubmit={handleEditUser}>
+            <div className="form-group"><label htmlFor="edit-username">Nome de usuário</label><input id="edit-username" required value={editingUser.username} onChange={event => setEditingUser({ ...editingUser, username: event.target.value })} /></div>
+            <div className="form-group"><label htmlFor="edit-module">Módulo</label><select id="edit-module" value={editingUser.module} onChange={event => setEditingUser({ ...editingUser, module: event.target.value })}><option>Corporativo</option><option>Varejo</option><option>Exportação</option><option>Comercial</option><option>Todos</option></select></div>
+            <div className="admin-permissions">{([['is_admin', 'Administrador'], ['can_edit_bo', 'Editar BO'], ['can_delete_bo', 'Excluir BO'], ['can_track_bo', 'Acompanhar BO']] as const).map(([field, label]) => <label key={field}><input type="checkbox" checked={editingUser[field]} onChange={event => setEditingUser({ ...editingUser, [field]: event.target.checked })} />{label}</label>)}</div>
+            <div className="confirm-modal-actions"><button className="secondary-action" type="button" onClick={() => setEditingUser(null)}>Cancelar</button><button className="primary-action" type="submit" disabled={isEditingUser}>{isEditingUser ? 'Salvando...' : 'Salvar alterações'}</button></div>
+          </form>
         </section>
       </div>}
 

@@ -6,6 +6,9 @@ import * as z from 'zod'
 import { supabase } from '../lib/supabase'
 import type { BoRecord, BoItem, AuditLog } from '../types'
 import { useAuth } from '../providers/AuthProvider'
+import { SearchSelectModal } from '../components/ui/SearchSelectModal'
+import { ErrorModal } from '../components/ui/ErrorModal'
+import { logApplicationError } from '../services/errorLogger'
 
 const editSchema = z.object({
   tipo_ocorrencia: z.string().min(1, 'Selecione o tipo'),
@@ -15,6 +18,12 @@ const editSchema = z.object({
 })
 
 type EditFormData = z.infer<typeof editSchema>
+type RawBoItem = BoItem & { ID?: number | string }
+
+const getItemId = (item: RawBoItem) => {
+  const itemId = Number(item.id ?? item.ID)
+  return Number.isInteger(itemId) && itemId > 0 ? itemId : null
+}
 
 export default function BoDetail() {
   const { id } = useParams()
@@ -29,11 +38,24 @@ export default function BoDetail() {
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [itemEdits, setItemEdits] = useState<Record<number, Partial<BoItem>>>({})
+  const [occurrenceOptions, setOccurrenceOptions] = useState<string[]>([])
+  const [sectorOptions, setSectorOptions] = useState<string[]>([])
+  const [motiveOptions, setMotiveOptions] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<'info' | 'history'>('info')
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  const { register, handleSubmit, reset } = useForm<EditFormData>({
+  const showError = (error: unknown, source: string) => {
+    const message = error instanceof Error ? error.message : String(error)
+    setErrorMessage(message)
+    void logApplicationError(error, { source })
+  }
+
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<EditFormData>({
     resolver: zodResolver(editSchema)
   })
+  const occurrence = watch('tipo_ocorrencia')
+  const sector = watch('setor_responsavel')
+  const freight = watch('frete')
 
   useEffect(() => {
     if (id && profile) {
@@ -44,10 +66,16 @@ export default function BoDetail() {
 
   const fetchBo = async () => {
     setLoading(true)
+    const recordId = Number(id)
+    if (!id || !Number.isInteger(recordId) || recordId <= 0) {
+      navigate('/bos', { replace: true })
+      return
+    }
+
     let query = supabase
       .from('bo_records')
       .select('*')
-      .eq('id', id)
+      .eq('id', recordId)
       .or('d_e_l_e_t_.neq.*,d_e_l_e_t_.is.null')
 
     if (profile && profile.module !== 'Todos' && !profile.is_admin) {
@@ -58,18 +86,24 @@ export default function BoDetail() {
 
     if (error) {
       console.error(error)
+      void logApplicationError(error, { source: 'BoDetail.fetchBo' })
       navigate('/bos')
       return
     }
     
     setBo(data as BoRecord)
+    const { data: recordsData } = await supabase.from('bo_records').select('tipo_ocorrencia,setor_responsavel')
+    const { data: motivesData } = await supabase.from('bo_itens').select('motivo')
+    const unique = (values: (string | null)[]) => [...new Set(values.map(value => value?.trim()).filter(Boolean) as string[])]
+    setOccurrenceOptions(unique((recordsData || []).map(record => record.tipo_ocorrencia)))
+    setSectorOptions(unique((recordsData || []).map(record => record.setor_responsavel)))
+    setMotiveOptions(unique((motivesData || []).map(item => item.motivo)))
     reset({
-      tipo_ocorrencia: data.tipo_ocorrencia,
-      setor_responsavel: data.setor_responsavel,
-      frete: data.frete,
-      descricao: data.descricao
+      tipo_ocorrencia: data.tipo_ocorrencia || '',
+      setor_responsavel: data.setor_responsavel || '',
+      frete: data.frete || '',
+      descricao: data.descricao || ''
     })
-
     const { data: itemsData, error: itemsError } = await supabase
       .from('bo_itens')
       .select('*')
@@ -78,15 +112,22 @@ export default function BoDetail() {
     
     if (itemsError) {
       console.error('Erro ao buscar itens do BO:', itemsError.message)
+      void logApplicationError(itemsError, { source: 'BoDetail.fetchItems' })
       setItems([])
     } else {
-      setItems((itemsData as BoItem[]) || [])
+      setItems(((itemsData || []) as RawBoItem[]).map(item => ({
+        ...item,
+        id: getItemId(item) as number
+      })))
     }
     setLoading(false)
   }
 
   const fetchHistory = async () => {
-    const { data: boData } = await supabase.from('bo_records').select('bo_number').eq('id', id).single()
+    const recordId = Number(id)
+    if (!id || !Number.isInteger(recordId) || recordId <= 0) return
+
+    const { data: boData } = await supabase.from('bo_records').select('bo_number').eq('id', recordId).single()
     if (!boData) return
 
     const { data, error } = await supabase
@@ -104,8 +145,8 @@ export default function BoDetail() {
   const handleUpdate = async (data: EditFormData) => {
     if (!profile) return
     setIsSaving(true)
-    
-    const { error } = await supabase
+
+    const { error: boError } = await supabase
       .from('bo_records')
       .update({
         tipo_ocorrencia: data.tipo_ocorrencia,
@@ -116,30 +157,37 @@ export default function BoDetail() {
       })
       .eq('id', id)
 
-    if (!error) {
-      const itemUpdates = Object.entries(itemEdits).map(([itemId, item]) =>
-        supabase.from('bo_itens').update({
-          cod: item.cod,
-          desc: item.desc,
-          linha: item.linha,
-          motivo: item.motivo,
-        }).eq('id', Number(itemId))
-      )
-      const itemResults = await Promise.all(itemUpdates)
-      const itemError = itemResults.find(result => result.error)?.error
-      if (itemError) {
-        alert('BO atualizado, mas houve um erro ao atualizar os itens: ' + itemError.message)
-        setIsSaving(false)
-        return
+    if (boError) {
+      showError(boError, 'BoDetail.handleUpdate.boRecord')
+      setIsSaving(false)
+      return
+    }
+
+    const itemUpdates = Object.entries(itemEdits).map(([itemId, item]) => {
+      const numericItemId = Number(itemId)
+      if (Number.isInteger(numericItemId) && numericItemId > 0) {
+        return supabase.from('bo_itens').update({ motivo: item.motivo }).eq('id', numericItemId)
       }
 
-      setItems(prev => prev.map(item => ({ ...item, ...(itemEdits[item.id] || {}) })))
-      setBo(prev => prev ? { ...prev, ...data } : null)
+      const originalItem = items.find(currentItem => String(currentItem.id) === itemId)
+      let fallbackQuery = supabase
+        .from('bo_itens')
+        .update({ motivo: item.motivo })
+        .eq('bo_ref', originalItem?.bo_ref || '')
+
+      if (originalItem?.cod) fallbackQuery = fallbackQuery.eq('cod', originalItem.cod)
+      if (originalItem?.linha) fallbackQuery = fallbackQuery.eq('linha', originalItem.linha)
+      return fallbackQuery
+    })
+    const itemResults = await Promise.all(itemUpdates)
+    const itemError = itemResults.find(result => result.error)?.error
+    if (itemError) {
+      showError(itemError, 'BoDetail.handleUpdate.items')
+    } else {
+      setItems(prev => prev.map(item => ({ ...item, motivo: itemEdits[item.id]?.motivo ?? item.motivo })))
       setIsEditing(false)
       setItemEdits({})
-      fetchHistory() // refresh history
-    } else {
-      alert('Erro ao atualizar BO: ' + error.message)
+      fetchHistory()
     }
     setIsSaving(false)
   }
@@ -160,7 +208,7 @@ export default function BoDetail() {
       setBo(prev => prev ? { ...prev, status: newStatus } : null)
       fetchHistory()
     } else {
-      alert('Erro ao mudar status: ' + error.message)
+      showError(error, 'BoDetail.handleStatusChange')
     }
   }
 
@@ -180,7 +228,7 @@ export default function BoDetail() {
       setIsDeleteModalOpen(false)
       navigate('/bos')
     } else {
-      alert('Erro ao excluir: ' + error.message)
+      showError(error, 'BoDetail.handleDelete')
     }
   }
 
@@ -194,6 +242,7 @@ export default function BoDetail() {
 
   return (
     <div className="bo-detail-page" style={{ maxWidth: '1000px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+      <ErrorModal message={errorMessage} onClose={() => setErrorMessage(null)} />
       <div className="bo-detail-actions">
         <button className="secondary-action" type="button" onClick={() => navigate(-1)}>← Voltar</button>
         <span>Detalhes do boletim</span>
@@ -259,7 +308,7 @@ export default function BoDetail() {
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
                 <h3 style={{ color: 'var(--text-secondary)' }}>Dados do SAREM</h3>
                 {profile?.can_edit_bo && !isEditing && (
-                  <button onClick={() => { setItemEdits(Object.fromEntries(items.map(item => [item.id, { cod: item.cod || '', desc: item.desc || '', linha: item.linha || '', motivo: item.motivo || '' }]))); setIsEditing(true) }} style={{ background: 'transparent', color: 'var(--primary-color)', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Editar</button>
+                  <button onClick={() => { setItemEdits(Object.fromEntries(items.map(item => [item.id, { motivo: item.motivo || '' }]))); setIsEditing(true) }} style={{ background: 'transparent', color: 'var(--primary-color)', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Editar</button>
                 )}
               </div>
               
@@ -272,36 +321,17 @@ export default function BoDetail() {
                 </div>
               ) : (
                 <form onSubmit={handleSubmit(handleUpdate)} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <div className="form-group">
-                    <label>Tipo de Ocorrência</label>
-                    <select {...register('tipo_ocorrencia')}>
-                      <option value="Avaria Produtiva">Avaria Produtiva</option>
-                      <option value="Assistência Técnica">Assistência Técnica</option>
-                      <option value="Falta de Material">Falta de Material</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>Setor Responsável</label>
-                    <select {...register('setor_responsavel')}>
-                      <option value="Produção">Produção</option>
-                      <option value="Qualidade">Qualidade</option>
-                      <option value="Comercial">Comercial</option>
-                      <option value="Logística">Logística</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>Frete</label>
-                    <select {...register('frete')}>
-                      <option value="CIF">CIF</option>
-                      <option value="FOB">FOB</option>
-                    </select>
-                  </div>
+                  <SearchSelectModal label="Tipo de Ocorrência" value={occurrence || ''} placeholder="Selecione..." options={occurrenceOptions} onChange={value => setValue('tipo_ocorrencia', value, { shouldValidate: true })} />
+                  {errors.tipo_ocorrencia && <span style={{ color: 'var(--error-color)', fontSize: '0.8rem' }}>{errors.tipo_ocorrencia.message}</span>}
+                  <SearchSelectModal label="Setor Responsável" value={sector || ''} placeholder="Selecione..." options={sectorOptions} onChange={value => setValue('setor_responsavel', value, { shouldValidate: true })} />
+                  {errors.setor_responsavel && <span style={{ color: 'var(--error-color)', fontSize: '0.8rem' }}>{errors.setor_responsavel.message}</span>}
+                  <SearchSelectModal label="Frete" value={freight || ''} placeholder="Selecione..." options={['CIF', 'FOB']} onChange={value => setValue('frete', value, { shouldValidate: true })} />
+                  {errors.frete && <span style={{ color: 'var(--error-color)', fontSize: '0.8rem' }}>{errors.frete.message}</span>}
                   <div className="form-group">
                     <label>Descrição</label>
                     <textarea {...register('descricao')} rows={3}></textarea>
                   </div>
-                  
-                  <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
+                  <div style={{ display: 'flex', gap: '1rem' }}>
                     <button type="button" onClick={() => { setIsEditing(false); setItemEdits({}) }} style={{ flex: 1, padding: '0.5rem', background: '#e2e8f0', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>Cancelar</button>
                     <button type="submit" disabled={isSaving} style={{ flex: 1, padding: '0.5rem', background: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
                       {isSaving ? 'Salvando...' : 'Salvar'}
@@ -323,7 +353,17 @@ export default function BoDetail() {
           </div>
 
           <div style={{ background: 'var(--surface-color)', padding: '1.5rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--surface-border)' }}>
-            <h3 style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>Itens Vinculados</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+              <h3 style={{ color: 'var(--text-secondary)' }}>Itens Vinculados</h3>
+              {isEditing && (
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <button type="button" onClick={() => { setIsEditing(false); setItemEdits({}) }} style={{ padding: '0.5rem 1rem', background: '#e2e8f0', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>Cancelar</button>
+                  <button type="button" onClick={() => handleSubmit(handleUpdate)()} disabled={isSaving} style={{ padding: '0.5rem 1rem', background: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
+                    {isSaving ? 'Salvando...' : 'Salvar motivos'}
+                  </button>
+                </div>
+              )}
+            </div>
             {items.length === 0 ? (
               <p style={{ color: 'var(--text-muted)' }}>Nenhum item vinculado.</p>
             ) : (
@@ -339,10 +379,23 @@ export default function BoDetail() {
                 <tbody>
                   {items.map(item => (
                     <tr key={item.id} style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                      <td style={{ padding: '0.75rem 0', fontWeight: 500 }}>{isEditing ? <input value={itemEdits[item.id]?.cod ?? item.cod ?? ''} onChange={event => setItemEdits(prev => ({ ...prev, [item.id]: { ...prev[item.id], cod: event.target.value } }))} /> : item.cod}</td>
-                      <td style={{ padding: '0.75rem 0' }}>{isEditing ? <input value={itemEdits[item.id]?.desc ?? item.desc ?? ''} onChange={event => setItemEdits(prev => ({ ...prev, [item.id]: { ...prev[item.id], desc: event.target.value } }))} /> : item.desc}</td>
-                      <td style={{ padding: '0.75rem 0' }}>{isEditing ? <input value={itemEdits[item.id]?.linha ?? item.linha ?? ''} onChange={event => setItemEdits(prev => ({ ...prev, [item.id]: { ...prev[item.id], linha: event.target.value } }))} /> : item.linha}</td>
-                      <td style={{ padding: '0.75rem 0' }}>{isEditing ? <input value={itemEdits[item.id]?.motivo ?? item.motivo ?? ''} onChange={event => setItemEdits(prev => ({ ...prev, [item.id]: { ...prev[item.id], motivo: event.target.value } }))} /> : item.motivo}</td>
+                      <td style={{ padding: '0.75rem 0', fontWeight: 500 }}>{item.cod}</td>
+                      <td style={{ padding: '0.75rem 0' }}>{item.desc}</td>
+                      <td style={{ padding: '0.75rem 0' }}>{item.linha}</td>
+                      <td style={{ padding: '0.75rem 0' }}>
+                        {isEditing ? (
+                          <SearchSelectModal
+                            label="Motivo"
+                            value={itemEdits[item.id]?.motivo ?? item.motivo ?? ''}
+                            placeholder="Informe o motivo"
+                            options={motiveOptions}
+                            onChange={value => setItemEdits(prev => ({
+                              ...prev,
+                              [item.id]: { ...prev[item.id], motivo: value }
+                            }))}
+                          />
+                        ) : item.motivo || '-'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
