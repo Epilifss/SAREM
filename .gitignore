@@ -27,3 +27,4 @@ dist-ssr
 *.sw?
 *.venv
 *supabase/snippets/
+.env
