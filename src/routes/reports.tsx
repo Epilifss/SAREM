@@ -1,7 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import ExcelJS from 'exceljs'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../providers/AuthProvider'
 import type { BoRecord } from '../types'
+import logoSarem from '../img/logo_sarem.svg'
+import logoSaremPng from '../img/SAREM.png'
 
 type ReportItem = { bo_ref: string; cod: string | null; desc: string | null; motivo: string | null }
 type ReportPreset = 'all' | 'open' | 'progress' | 'closed' | 'products'
@@ -16,6 +19,42 @@ const presets: Array<{ value: ReportPreset; label: string }> = [
 ]
 
 const getMessage = (error: unknown) => error instanceof Error ? error.message : String(error)
+const reportFooter = 'Todos os direitos reservados - SAREM'
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>'"]/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
+  })[character] || character)
+}
+
+async function imageDataUrl(source: string): Promise<string | null> {
+  const response = await fetch(source)
+  if (!response.ok) return null
+  const blob = await response.blob()
+  return await new Promise(resolve => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null)
+    reader.onerror = () => resolve(null)
+    reader.readAsDataURL(blob)
+  })
+}
+
+function printReport(title: string, rows: ReportRow[]) {
+  const printWindow = window.open('', '_blank', 'width=1100,height=800')
+  if (!printWindow) return
+  const generatedAt = new Date().toLocaleString('pt-BR')
+  const logoUrl = new URL(logoSarem, window.location.href).href
+  const headers = Object.keys(rows[0] || { BO: '', Status: '' })
+  const tableRows = rows.map(row => `<tr>${headers.map(header => `<td>${escapeHtml(row[header] || '-')}</td>`).join('')}</tr>`).join('')
+  printWindow.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8"><title>${escapeHtml(title)}</title><style>
+    @page { margin: 16mm; } body { font-family: Arial, sans-serif; color: #172033; margin: 0; } header { display: flex; align-items: center; gap: 16px; border-bottom: 2px solid #24577f; padding-bottom: 14px; } header img { width: 130px; max-height: 54px; object-fit: contain; } h1 { font-size: 20px; margin: 0 0 6px; } p { margin: 0; color: #64748b; font-size: 12px; } table { width: 100%; border-collapse: collapse; margin-top: 22px; font-size: 11px; } th, td { border: 1px solid #cbd5e1; padding: 7px; text-align: left; } th { background: #e8f0f6; color: #24577f; } footer { border-top: 1px solid #cbd5e1; margin-top: 24px; padding-top: 10px; text-align: center; color: #64748b; font-size: 10px; }
+  </style></head><body><header><img src="${escapeHtml(logoUrl)}" alt="SAREM"><div><h1>${escapeHtml(title)}</h1><p>Gerado em ${escapeHtml(generatedAt)}</p></div></header><table><thead><tr>${headers.map(header => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody>${tableRows || `<tr><td colspan="${headers.length}">Nenhum registro encontrado.</td></tr>`}</tbody></table><footer>${reportFooter}</footer></body></html>`)
+  printWindow.document.close()
+  const print = () => { printWindow.focus(); printWindow.print() }
+  const logo = printWindow.document.querySelector('img')
+  if (logo && !logo.complete) logo.addEventListener('load', print, { once: true })
+  else window.setTimeout(print, 100)
+}
 
 function formatRows(records: BoRecord[], items: ReportItem[], preset: ReportPreset): ReportRow[] {
   if (preset === 'products') {
@@ -112,6 +151,63 @@ export default function Reports() {
   const unique = (values: Array<string | null>) => [...new Set(values.map(value => value?.trim()).filter(Boolean) as string[])].sort()
   const reportTitle = presets.find(option => option.value === preset)?.label || 'Relatório personalizado'
   const headers = Object.keys(rows[0] || {})
+  const filterSummary = [term && `Busca: ${term}`, status && `Status: ${status}`, module && `Módulo: ${module}`, sector && `Setor: ${sector}`, cause && `Causa: ${cause}`, dateStart && `De: ${dateStart}`, dateEnd && `Até: ${dateEnd}`].filter(Boolean).join(' | ') || 'Sem filtros adicionais'
+
+  const exportXlsx = async () => {
+    const workbook = new ExcelJS.Workbook()
+    workbook.creator = 'SAREM'
+    workbook.created = new Date()
+    const worksheet = workbook.addWorksheet('Relatório', { views: [{ state: 'frozen', ySplit: 4 }] })
+    const lastColumn = Math.max(headers.length, 1)
+    worksheet.mergeCells(1, 1, 1, lastColumn)
+    worksheet.getCell(1, 1).value = 'SAREM'
+    worksheet.getCell(1, 1).font = { name: 'Arial', size: 18, bold: true, color: { argb: 'FFFFFFFF' } }
+    worksheet.getCell(1, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '24577FFF' } }
+    worksheet.getCell(1, 1).alignment = { vertical: 'middle', horizontal: 'left' }
+    worksheet.getRow(1).height = 30
+    const logoData = await imageDataUrl(logoSaremPng)
+    if (logoData) {
+      const logoId = workbook.addImage({ base64: logoData, extension: 'png' })
+      worksheet.addImage(logoId, { tl: { col: 0.15, row: 0.15 }, ext: { width: 92, height: 25 } })
+    }
+    worksheet.mergeCells(2, 1, 2, lastColumn)
+    worksheet.getCell(2, 1).value = reportTitle
+    worksheet.getCell(2, 1).font = { name: 'Arial', size: 14, bold: true, color: { argb: '24577FFF' } }
+    worksheet.mergeCells(3, 1, 3, lastColumn)
+    worksheet.getCell(3, 1).value = `${filterSummary} | Gerado em ${new Date().toLocaleString('pt-BR')}`
+    worksheet.getCell(3, 1).font = { name: 'Arial', italic: true, color: { argb: '64748BFF' } }
+    const headerRow = worksheet.addRow(headers)
+    headerRow.height = 24
+    headerRow.eachCell(cell => {
+      cell.font = { name: 'Arial', bold: true, color: { argb: 'FFFFFFFF' } }
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '0F766EFF' } }
+      cell.alignment = { vertical: 'middle', horizontal: 'left' }
+      cell.border = { bottom: { style: 'thin', color: { argb: 'CBD5E1FF' } } }
+    })
+    rows.forEach(row => worksheet.addRow(headers.map(header => row[header] || '')))
+    worksheet.autoFilter = { from: { row: 4, column: 1 }, to: { row: Math.max(4, rows.length + 4), column: lastColumn } }
+    worksheet.columns = headers.map(header => ({ header, key: header, width: Math.min(34, Math.max(16, header.length + 4)) }))
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber < 5) return
+      row.eachCell(cell => {
+        cell.font = { name: 'Arial', size: 10, color: { argb: '172033FF' } }
+        cell.alignment = { vertical: 'top', wrapText: true }
+        if (rowNumber % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F1F5F9FF' } }
+        cell.border = { bottom: { style: 'hair', color: { argb: 'E2E8F0FF' } } }
+      })
+    })
+    const footerRow = worksheet.addRow([reportFooter])
+    worksheet.mergeCells(footerRow.number, 1, footerRow.number, lastColumn)
+    footerRow.getCell(1).font = { name: 'Arial', italic: true, color: { argb: '64748BFF' } }
+    footerRow.getCell(1).alignment = { horizontal: 'center' }
+    worksheet.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, horizontalDpi: 300, verticalDpi: 300 }
+    const buffer = await workbook.xlsx.writeBuffer()
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
+    link.download = `${reportTitle.toLowerCase().replace(/[^a-z0-9]+/gi, '-')}.xlsx`
+    link.click()
+    URL.revokeObjectURL(link.href)
+  }
 
   return (
     <div className="reports-page">
@@ -133,7 +229,7 @@ export default function Reports() {
         </div>
       </form>
       <section className="reports-result-panel">
-        <div className="reports-result-heading"><div><h2>{reportTitle}</h2><span>{generated ? 'Resultado pronto para impressão' : 'O resultado aparecerá aqui'}</span></div><button className="secondary-action" type="button" onClick={() => window.print()} disabled={!generated || rows.length === 0}>Imprimir relatório</button></div>
+        <div className="reports-result-heading"><div><h2>{reportTitle}</h2><span>{generated ? `${filterSummary} · ${rows.length} registros` : 'O resultado aparecerá aqui'}</span></div><div className="report-actions"><button className="secondary-action" type="button" onClick={() => printReport(reportTitle, rows)} disabled={!generated || rows.length === 0}>Imprimir / PDF</button><button className="primary-action" type="button" onClick={exportXlsx} disabled={!generated || rows.length === 0}>Exportar XLSX</button></div></div>
         {!generated ? <div className="reports-empty">Configure os parâmetros acima e clique em “Gerar relatório”.</div> : rows.length === 0 ? <div className="reports-empty">Nenhum registro encontrado para os filtros selecionados.</div> : <div className="dashboard-table-wrap"><table className="dashboard-table reports-table"><thead><tr>{headers.map(header => <th key={header}>{header}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.BO || row.Produto || 'linha'}-${index}`}>{headers.map(header => <td key={header}>{row[header]}</td>)}</tr>)}</tbody></table></div>}
       </section>
     </div>
