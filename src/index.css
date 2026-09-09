@@ -537,6 +537,7 @@ body {
 .dashboard-stat span { color: var(--text-secondary); font-size: 0.85rem; }
 .dashboard-stat strong { font-size: 2rem; line-height: 1; color: var(--primary-color); }
 .dashboard-stat small { font-size: 0.75rem; }
+.dashboard-cost-stat strong { font-size: 1.45rem; }
 .dashboard-report-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .dashboard-panel-heading { margin-bottom: 1.25rem; }
 .dashboard-panel-heading h2 { font-size: 1rem; overflow-wrap: anywhere; }
@@ -546,7 +547,17 @@ body {
 .dashboard-bar-label { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.4rem; font-size: 0.85rem; }
 .dashboard-bar-label span { min-width: 0; overflow-wrap: anywhere; }
 .dashboard-bar-track { height: 0.55rem; overflow: hidden; border-radius: 999px; background: #e2e8f0; }
-.dashboard-bar-fill { height: 100%; min-width: 0.35rem; border-radius: inherit; transition: width var(--transition-normal); }
+.dashboard-bar-fill { height: 100%; min-width: 0.35rem; border-radius: inherit; transform-origin: left; animation: dashboard-bar-enter 0.8s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.dashboard-pie-content { display: flex; align-items: center; gap: 1.25rem; min-height: 170px; }
+.dashboard-pie { flex: 0 0 148px; width: 148px; aspect-ratio: 1; border: 10px solid rgba(255, 255, 255, 0.8); border-radius: 50%; box-shadow: var(--shadow-md); animation: dashboard-pie-enter 0.75s ease-out both; }
+.dashboard-pie-legend { display: flex; flex: 1; flex-direction: column; gap: 0.55rem; min-width: 0; }
+.dashboard-pie-legend-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.5rem; min-width: 0; font-size: 0.78rem; }
+.dashboard-pie-legend-row span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-pie-legend-row strong { color: var(--text-secondary); font-size: 0.75rem; }
+.dashboard-pie-swatch { width: 0.65rem; height: 0.65rem; border-radius: 50%; }
+@keyframes dashboard-bar-enter { from { transform: scaleX(0); opacity: 0.2; } to { transform: scaleX(1); opacity: 1; } }
+@keyframes dashboard-pie-enter { from { transform: scale(0.72) rotate(-12deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .dashboard-bar-fill, .dashboard-pie { animation: none; } }
 .dashboard-table-panel { overflow: hidden; }
 .dashboard-table-wrap { max-height: 420px; overflow: auto; }
 .dashboard-table { width: 100%; border-collapse: collapse; text-align: left; }

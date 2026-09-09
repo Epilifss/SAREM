@@ -11,16 +11,21 @@ type DashboardRecord = {
   setor_responsavel: string | null
   modulo: string | null
   tipo_ocorrencia: string | null
+  custo: string | null
+  causa: string | null
 }
 
 type DashboardItem = {
   bo_ref: string
+  cod: string | null
+  desc: string | null
   motivo: string | null
 }
 
 type ReportRow = { label: string; count: number }
-type ReportKind = 'total' | 'open' | 'progress' | 'closed' | 'sector' | 'module' | 'occurrence' | 'itemReason'
+type ReportKind = 'total' | 'open' | 'progress' | 'closed' | 'sector' | 'module' | 'occurrence' | 'itemReason' | 'product'
 type DetailedReportRow = Record<string, string>
+const chartColors = ['#24577f', '#d97745', '#0f766e', '#f59e0b', '#7c3aed', '#dc4a68', '#3b82a8', '#64748b']
 
 const reportFooter = 'Todos os direitos reservados - SAREM'
 
@@ -31,6 +36,8 @@ function reportRows(records: DashboardRecord[]): DetailedReportRow[] {
     'Setor responsável': record.setor_responsavel?.trim() || 'Não informado',
     Módulo: record.modulo?.trim() || 'Não informado',
     'Tipo de ocorrência': record.tipo_ocorrencia?.trim() || 'Não informado',
+    Custo: record.custo?.trim() || 'Não informado',
+    Causa: record.causa?.trim() || 'Não informado',
   }))
 }
 
@@ -39,6 +46,35 @@ function itemReportRows(items: DashboardItem[]): DetailedReportRow[] {
     'Número do BO': item.bo_ref,
     Motivo: item.motivo?.trim() || 'Não informado',
   }))
+}
+
+function productReportRows(items: DashboardItem[]): DetailedReportRow[] {
+  const products = items.reduce<Record<string, { description: string; count: number }>>((result, item) => {
+    const code = item.cod?.trim() || 'Não informado'
+    const current = result[code] || { description: item.desc?.trim() || 'Descrição não informada', count: 0 }
+    result[code] = { description: current.description, count: current.count + 1 }
+    return result
+  }, {})
+
+  return Object.entries(products)
+    .sort(([, left], [, right]) => right.count - left.count)
+    .map(([code, product]) => ({
+      Produto: code,
+      Descrição: product.description,
+      Ocorrências: String(product.count),
+    }))
+}
+
+function productCountRows(items: DashboardItem[]): ReportRow[] {
+  const products = items.reduce<Record<string, ReportRow>>((result, item) => {
+    const code = item.cod?.trim() || 'Não informado'
+    const description = item.desc?.trim()
+    const label = description ? `${code} - ${description}` : code
+    result[code] = { label, count: (result[code]?.count || 0) + 1 }
+    return result
+  }, {})
+
+  return Object.values(products).sort((left, right) => right.count - left.count)
 }
 
 function escapeHtml(value: string): string {
@@ -110,7 +146,18 @@ function compactRows(rows: ReportRow[], limit = 8): ReportRow[] {
   return [...visible, { label: 'Outros', count: others }]
 }
 
-function BarReport({ title, rows, color, onOpen }: { title: string; rows: ReportRow[]; color: string; onOpen: () => void }) {
+function parseCurrency(value: string | null): number {
+  if (!value) return 0
+  const normalized = value.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.')
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function formatCurrency(value: number): string {
+  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+function BarReport({ title, rows, color, onOpen, unit = 'BOs' }: { title: string; rows: ReportRow[]; color: string; onOpen: () => void; unit?: string }) {
   const chartRows = compactRows(rows)
   const maximum = chartRows[0]?.count || 1
 
@@ -118,7 +165,7 @@ function BarReport({ title, rows, color, onOpen }: { title: string; rows: Report
     <section className="dashboard-panel dashboard-report-card" role="button" tabIndex={0} onClick={onOpen} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') onOpen() }}>
       <div className="dashboard-panel-heading">
         <h2>{title}</h2>
-        <span>{rows.reduce((total, row) => total + row.count, 0)} BOs</span>
+        <span>{rows.reduce((total, row) => total + row.count, 0)} {unit}</span>
       </div>
       {chartRows.length === 0 ? <p className="dashboard-empty">Nenhum dado disponível.</p> : (
         <div className="dashboard-bars">
@@ -133,6 +180,33 @@ function BarReport({ title, rows, color, onOpen }: { title: string; rows: Report
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function PieReport({ title, rows, onOpen }: { title: string; rows: ReportRow[]; onOpen: () => void }) {
+  const chartRows = compactRows(rows)
+  const total = chartRows.reduce((sum, row) => sum + row.count, 0)
+  const segments = chartRows.reduce<Array<ReportRow & { start: number; end: number; color: string }>>((result, row, index) => {
+    const start = result.at(-1)?.end || 0
+    const end = start + (total ? row.count / total : 0)
+    return [...result, { ...row, start, end, color: chartColors[index % chartColors.length] }]
+  }, [])
+
+  return (
+    <section className="dashboard-panel dashboard-report-card dashboard-pie-card" role="button" tabIndex={0} onClick={onOpen} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') onOpen() }}>
+      <div className="dashboard-panel-heading">
+        <h2>{title}</h2>
+        <span>{rows.reduce((sum, row) => sum + row.count, 0)} BOs</span>
+      </div>
+      {segments.length === 0 ? <p className="dashboard-empty">Nenhum dado disponível.</p> : (
+        <div className="dashboard-pie-content">
+          <div className="dashboard-pie" style={{ background: `conic-gradient(${segments.map(segment => `${segment.color} ${segment.start * 100}% ${segment.end * 100}%`).join(', ')})` }} aria-label={`Distribuição de ${title}`} />
+          <div className="dashboard-pie-legend">
+            {segments.map(segment => <div className="dashboard-pie-legend-row" key={segment.label}><span className="dashboard-pie-swatch" style={{ background: segment.color }} /><span title={segment.label}>{segment.label}</span><strong>{Math.round((segment.count / total) * 100)}%</strong></div>)}
+          </div>
         </div>
       )}
     </section>
@@ -247,7 +321,7 @@ export default function Dashboard() {
       setError(null)
       let query = supabase
         .from('bo_records')
-        .select('bo_number, status, setor_responsavel, modulo, tipo_ocorrencia')
+        .select('bo_number, status, setor_responsavel, modulo, tipo_ocorrencia, custo, causa')
         .or('d_e_l_e_t_.neq.*,d_e_l_e_t_.is.null')
 
       if (profile.module !== 'Todos' && !profile.is_admin) query = query.eq('modulo', profile.module)
@@ -267,7 +341,7 @@ export default function Dashboard() {
         } else {
           const { data: itemData, error: itemError } = await supabase
             .from('bo_itens')
-            .select('motivo, bo_ref')
+            .select('motivo, bo_ref, cod, desc')
             .in('bo_ref', boNumbers)
 
           if (itemError) setError(itemError.message)
@@ -284,9 +358,14 @@ export default function Dashboard() {
   const sectorRows = countBy(records, 'setor_responsavel')
   const moduleRows = countBy(records, 'modulo')
   const occurrenceRows = countBy(records, 'tipo_ocorrencia')
+  const causeRows = countBy(records, 'causa')
   const itemMotivoRows = countBy(items, 'motivo')
+  const productRows = productCountRows(items)
   const closed = records.filter(record => record.status === 'Embarcado').length
   const inProgress = records.filter(record => record.status === 'Em Andamento').length
+  const totalCost = records.reduce((sum, record) => sum + parseCurrency(record.custo), 0)
+  const costRecords = records.filter(record => parseCurrency(record.custo) > 0).length
+  const averageCost = costRecords ? totalCost / costRecords : 0
   const canSeeAllModules = profile?.module === 'Todos' || profile?.is_admin === true
   const reportData: Record<ReportKind, { title: string; rows: DetailedReportRow[] }> = {
     total: { title: 'Relatório de todos os BOs', rows: reportRows(records) },
@@ -297,6 +376,7 @@ export default function Dashboard() {
     module: { title: 'Relatório de BOs por módulo', rows: reportRows(records) },
     occurrence: { title: 'Relatório de BOs por tipo de ocorrência', rows: reportRows(records) },
     itemReason: { title: 'Relatório de motivos dos itens', rows: itemReportRows(items) },
+    product: { title: 'Relatório de produtos com mais problemas', rows: productReportRows(items) },
   }
 
   return (
@@ -314,6 +394,8 @@ export default function Dashboard() {
                 <span>{label}</span><strong>{value}</strong><small>{description}</small>
               </button>
             ))}
+            <div className="dashboard-stat dashboard-cost-stat"><span>Custo total</span><strong>{formatCurrency(totalCost)}</strong><small>{costRecords} BOs com custo informado</small></div>
+            <div className="dashboard-stat dashboard-cost-stat"><span>Custo médio</span><strong>{formatCurrency(averageCost)}</strong><small>Considerando custos preenchidos</small></div>
           </div>
           <div className="dashboard-report-grid">
             <BarReport title="BOs por setor responsável" rows={sectorRows} color="var(--primary-color)" onOpen={() => setSelectedReport(reportData.sector)} />
@@ -321,6 +403,9 @@ export default function Dashboard() {
             {canSeeAllModules && <BarReport title="BOs por módulo" rows={moduleRows} color="var(--accent-color)" onOpen={() => setSelectedReport(reportData.module)} />}
             <BarReport title="Tipos de ocorrência" rows={occurrenceRows} color="#f59e0b" onOpen={() => setSelectedReport(reportData.occurrence)} />
             <BarReport title="Motivos dos itens" rows={itemMotivoRows} color="#0f766e" onOpen={() => setSelectedReport(reportData.itemReason)} />
+            <BarReport title="Produtos com mais problemas" rows={productRows} color="#dc4a68" unit="ocorrências" onOpen={() => setSelectedReport(reportData.product)} />
+            <PieReport title="BOs por status" rows={statusRows} onOpen={() => setSelectedReport(reportData.total)} />
+            <PieReport title="BOs por causa" rows={causeRows} onOpen={() => setSelectedReport(reportData.total)} />
           </div>
           <section className="dashboard-panel dashboard-table-panel">
             <div className="dashboard-panel-heading"><h2>Relatório por setor</h2><span>Distribuição dos registros</span></div>
