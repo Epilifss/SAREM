@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import ExcelJS from 'exceljs'
 import { useAuth } from '../providers/AuthProvider'
 import { supabase } from '../lib/supabase'
@@ -307,6 +308,7 @@ function ReportModal({ title, rows, onClose }: { title: string; rows: DetailedRe
 
 export default function Dashboard() {
   const { profile } = useAuth()
+  const navigate = useNavigate()
   const [records, setRecords] = useState<DashboardRecord[]>([])
   const [items, setItems] = useState<DashboardItem[]>([])
   const [selectedReport, setSelectedReport] = useState<{ title: string; rows: DetailedReportRow[] } | null>(null)
@@ -378,6 +380,7 @@ export default function Dashboard() {
     itemReason: { title: 'Relatório de motivos dos itens', rows: itemReportRows(items) },
     product: { title: 'Relatório de produtos com mais problemas', rows: productReportRows(items) },
   }
+  void reportData
 
   return (
     <div className="dashboard-page">
@@ -390,7 +393,7 @@ export default function Dashboard() {
         <>
           <div className="dashboard-stat-grid">
             {([['total', 'Total de BOs', records.length, 'Registros ativos'], ['open', 'Em aberto', records.length - closed, 'Precisam de acompanhamento'], ['progress', 'Em andamento', inProgress, 'Status atual'], ['closed', 'Encerrados', closed, 'BOs embarcados']] as const).map(([kind, label, value, description]) => (
-              <button className="dashboard-stat" type="button" key={kind} onClick={() => setSelectedReport(reportData[kind])}>
+              <button className="dashboard-stat" type="button" key={kind} onClick={() => navigate('/reports')}>
                 <span>{label}</span><strong>{value}</strong><small>{description}</small>
               </button>
             ))}
@@ -398,14 +401,14 @@ export default function Dashboard() {
             <div className="dashboard-stat dashboard-cost-stat"><span>Custo médio</span><strong>{formatCurrency(averageCost)}</strong><small>Considerando custos preenchidos</small></div>
           </div>
           <div className="dashboard-report-grid">
-            <BarReport title="BOs por setor responsável" rows={sectorRows} color="var(--primary-color)" onOpen={() => setSelectedReport(reportData.sector)} />
-            <BarReport title="BOs por status" rows={statusRows} color="var(--secondary-color)" onOpen={() => setSelectedReport(reportData.total)} />
-            {canSeeAllModules && <BarReport title="BOs por módulo" rows={moduleRows} color="var(--accent-color)" onOpen={() => setSelectedReport(reportData.module)} />}
-            <BarReport title="Tipos de ocorrência" rows={occurrenceRows} color="#f59e0b" onOpen={() => setSelectedReport(reportData.occurrence)} />
-            <BarReport title="Motivos dos itens" rows={itemMotivoRows} color="#0f766e" onOpen={() => setSelectedReport(reportData.itemReason)} />
-            <BarReport title="Produtos com mais problemas" rows={productRows} color="#dc4a68" unit="ocorrências" onOpen={() => setSelectedReport(reportData.product)} />
-            <PieReport title="BOs por status" rows={statusRows} onOpen={() => setSelectedReport(reportData.total)} />
-            <PieReport title="BOs por causa" rows={causeRows} onOpen={() => setSelectedReport(reportData.total)} />
+            <BarReport title="BOs por setor responsável" rows={sectorRows} color="var(--primary-color)" onOpen={() => navigate('/reports')} />
+            <BarReport title="BOs por status" rows={statusRows} color="var(--secondary-color)" onOpen={() => navigate('/reports')} />
+            {canSeeAllModules && <BarReport title="BOs por módulo" rows={moduleRows} color="var(--accent-color)" onOpen={() => navigate('/reports')} />}
+            <BarReport title="Tipos de ocorrência" rows={occurrenceRows} color="#f59e0b" onOpen={() => navigate('/reports')} />
+            <BarReport title="Motivos dos itens" rows={itemMotivoRows} color="#0f766e" onOpen={() => navigate('/reports')} />
+            <BarReport title="Produtos com mais problemas" rows={productRows} color="#dc4a68" unit="ocorrências" onOpen={() => navigate('/reports')} />
+            <PieReport title="BOs por status" rows={statusRows} onOpen={() => navigate('/reports')} />
+            <PieReport title="BOs por causa" rows={causeRows} onOpen={() => navigate('/reports')} />
           </div>
           <section className="dashboard-panel dashboard-table-panel">
             <div className="dashboard-panel-heading"><h2>Relatório por setor</h2><span>Distribuição dos registros</span></div>

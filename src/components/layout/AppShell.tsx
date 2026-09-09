@@ -24,6 +24,7 @@ export default function AppShell() {
         <nav className="app-nav">
           <NavLink to="/" end style={({ isActive }) => linkStyle(isActive)}>Dashboard</NavLink>
           <NavLink to="/bos" style={() => linkStyle(isBoListActive)}>Boletins</NavLink>
+          <NavLink to="/reports" style={({ isActive }) => linkStyle(isActive)}>Relatórios</NavLink>
           {profile?.can_track_bo && (
             <NavLink to="/bos/new" style={() => linkStyle(pathname === '/bos/new')}>Acompanhar BO</NavLink>
           )}

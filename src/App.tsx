@@ -9,6 +9,7 @@ import BoDetail from './routes/bo-detail'
 import AdminUsers from './routes/admin-users'
 import ProfilePage from './routes/profile'
 import AdminErrorLogs from './routes/admin-error-logs'
+import Reports from './routes/reports'
 
 
 
@@ -21,6 +22,7 @@ function App() {
       
       <Route path="/" element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
+        <Route path="reports" element={<Reports />} />
         <Route path="bos" element={<BoList />} />
         <Route path="bos/new" element={<BoNew />} />
         <Route path="bos/:id" element={<BoDetail />} />
