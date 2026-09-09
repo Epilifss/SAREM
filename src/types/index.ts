@@ -17,6 +17,10 @@ export type BoRecord = {
   tipo_ocorrencia: string | null
   motivo: string | null
   frete: string | null
+  custo: string | null
+  procedencia: boolean | null
+  causa: string | null
+  falha: string | null
   setor_responsavel: string | null
   status: string | null
   previsao_embarque: string | null

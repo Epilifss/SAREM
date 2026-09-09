@@ -15,10 +15,24 @@ const formSchema = z.object({
   tipo_ocorrencia: z.string().min(1, 'Selecione o tipo de ocorrência'),
   setor_responsavel: z.string().min(1, 'Selecione o setor responsável'),
   frete: z.string().min(1, 'Selecione o tipo de frete'),
+  custo: z.string().optional(),
+  procedencia: z.boolean(),
+  causa: z.string().optional(),
+  falha: z.string().optional(),
   descricao: z.string().optional(),
 })
 
 type FormData = z.infer<typeof formSchema>
+const causeOptions = ['acordo comercial', 'fábrica', 'desenvolvimento', 'fornecedor', 'transporte']
+
+const formatCurrency = (value: string) => {
+  const digits = value.replace(/\D/g, '')
+  if (!digits) return ''
+  return (Number(digits) / 100).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  })
+}
 
 export default function BoNew() {
   const navigate = useNavigate()
@@ -43,6 +57,8 @@ export default function BoNew() {
   const occurrence = watch('tipo_ocorrencia')
   const sector = watch('setor_responsavel')
   const freight = watch('frete')
+  const cause = watch('causa')
+  const cost = watch('custo')
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -139,6 +155,10 @@ export default function BoNew() {
           tipo_ocorrencia: data.tipo_ocorrencia,
           setor_responsavel: data.setor_responsavel,
           frete: data.frete,
+          custo: data.custo,
+          procedencia: data.procedencia,
+          causa: data.causa,
+          falha: data.falha,
           descricao: data.descricao,
           modulo: userModule,
           status: 'Em Andamento'
@@ -267,7 +287,7 @@ export default function BoNew() {
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <div className="bo-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1.5rem' }}>
+            <div className="bo-form-grid">
               <div className="form-group">
                 <SearchSelectModal label="Tipo de Ocorrência" value={occurrence || ''} placeholder="Selecione..." options={occurrenceOptions} onChange={value => setValue('tipo_ocorrencia', value, { shouldValidate: true })} />
                 {errors.tipo_ocorrencia && <span style={{ color: 'var(--error-color)', fontSize: '0.8rem' }}>{errors.tipo_ocorrencia.message}</span>}
@@ -282,6 +302,33 @@ export default function BoNew() {
                 <SearchSelectModal label="Frete" value={freight || ''} placeholder="Selecione..." options={['CIF', 'FOB']} onChange={value => setValue('frete', value, { shouldValidate: true })} />
                 {errors.frete && <span style={{ color: 'var(--error-color)', fontSize: '0.8rem' }}>{errors.frete.message}</span>}
               </div>
+
+              <div className="form-group">
+                <label htmlFor="custo">Custo</label>
+                <input
+                  id="custo"
+                  type="text"
+                  inputMode="decimal"
+                  value={cost || ''}
+                  onChange={event => setValue('custo', formatCurrency(event.target.value), { shouldValidate: true })}
+                  placeholder="R$ 0,00"
+                />
+              </div>
+
+              <div className="form-group">
+                <SearchSelectModal label="Causa" value={cause || ''} placeholder="Selecione..." options={causeOptions} onChange={value => setValue('causa', value, { shouldValidate: true })} />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="falha">Falha</label>
+                <input id="falha" type="text" {...register('falha')} />
+              </div>
+
+              <label className="bo-procedencia-field">
+                <input type="checkbox" {...register('procedencia')} />
+                <span>Procedência</span>
+                <small>Sim / Não</small>
+              </label>
             </div>
 
             <div className="form-group">
@@ -294,20 +341,22 @@ export default function BoNew() {
             </div>
 
             <div className="bo-items-section" style={{ borderTop: '1px solid var(--surface-border)', paddingTop: '1.5rem' }}>
-              <h3 style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>Itens da BO e motivos</h3>
+              <div className="bo-items-heading">
+                <h3>Itens da BO e motivos</h3>
+                <span>{boItems.length} {boItems.length === 1 ? 'item' : 'itens'}</span>
+              </div>
               {boItems.length === 0 ? (
                 <p style={{ color: 'var(--text-muted)' }}>Esta BO não possui itens cadastrados.</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '360px', overflowY: 'auto', paddingRight: '0.5rem' }}>
                   {boItems.map((item, index) => (
-                    <div key={`${item.cod}-${index}`} className="bo-item-row" style={{ display: 'grid', gridTemplateColumns: 'minmax(70px, 100px) minmax(0, 1fr) minmax(220px, 1fr)', gap: '1rem', alignItems: 'center', padding: '0.75rem', border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)' }}>
-                      <strong style={{ overflowWrap: 'anywhere' }}>{item.cod}</strong>
-                      <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                    <div key={`${item.cod}-${index}`} className="bo-item-row">
+                      <div className="bo-item-code"><span>Código</span><strong>{item.cod}</strong></div>
+                      <div className="bo-item-description">
                         <div>{item.desc}</div>
                         <small style={{ color: 'var(--text-secondary)' }}>{item.linha}</small>
                       </div>
-                      <div className="form-group">
-                        <label htmlFor={`motivo-${index}`}>Motivo</label>
+                      <div className="bo-item-reason form-group">
                         <SearchSelectModal label="Motivo" value={itemMotives[index] || ''} placeholder="Usar tipo selecionado" options={motivoOptions} onChange={value => {
                           setItemMotives(prev => ({ ...prev, [index]: value }))
                           setCustomItemMotives(prev => ({ ...prev, [index]: '' }))

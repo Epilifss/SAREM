@@ -14,11 +14,25 @@ const editSchema = z.object({
   tipo_ocorrencia: z.string().min(1, 'Selecione o tipo'),
   setor_responsavel: z.string().min(1, 'Selecione o setor'),
   frete: z.string().min(1, 'Selecione o frete'),
+  custo: z.string().optional(),
+  procedencia: z.boolean(),
+  causa: z.string().optional(),
+  falha: z.string().optional(),
   descricao: z.string().optional(),
 })
 
 type EditFormData = z.infer<typeof editSchema>
 type RawBoItem = BoItem & { ID?: number | string }
+const causeOptions = ['acordo comercial', 'fábrica', 'desenvolvimento', 'fornecedor', 'transporte']
+
+const formatCurrency = (value: string) => {
+  const digits = value.replace(/\D/g, '')
+  if (!digits) return ''
+  return (Number(digits) / 100).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  })
+}
 
 const getItemId = (item: RawBoItem) => {
   const itemId = Number(item.id ?? item.ID)
@@ -56,6 +70,8 @@ export default function BoDetail() {
   const occurrence = watch('tipo_ocorrencia')
   const sector = watch('setor_responsavel')
   const freight = watch('frete')
+  const cause = watch('causa')
+  const cost = watch('custo')
 
   useEffect(() => {
     if (id && profile) {
@@ -102,6 +118,10 @@ export default function BoDetail() {
       tipo_ocorrencia: data.tipo_ocorrencia || '',
       setor_responsavel: data.setor_responsavel || '',
       frete: data.frete || '',
+      custo: data.custo || '',
+      procedencia: Boolean(data.procedencia),
+      causa: data.causa || '',
+      falha: data.falha || '',
       descricao: data.descricao || ''
     })
     const { data: itemsData, error: itemsError } = await supabase
@@ -152,6 +172,10 @@ export default function BoDetail() {
         tipo_ocorrencia: data.tipo_ocorrencia,
         setor_responsavel: data.setor_responsavel,
         frete: data.frete,
+        custo: data.custo,
+        procedencia: data.procedencia,
+        causa: data.causa,
+        falha: data.falha,
         descricao: data.descricao,
         user_edit: profile.id
       })
@@ -317,6 +341,10 @@ export default function BoDetail() {
                   <div><strong style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.8rem' }}>Ocorrência:</strong> {bo.tipo_ocorrencia}</div>
                   <div><strong style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.8rem' }}>Setor Responsável:</strong> {bo.setor_responsavel}</div>
                   <div><strong style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.8rem' }}>Frete:</strong> {bo.frete}</div>
+                  <div><strong style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.8rem' }}>Custo:</strong> {bo.custo || '-'}</div>
+                  <div><strong style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.8rem' }}>Procedência:</strong> {bo.procedencia ? 'Sim' : 'Não'}</div>
+                  <div><strong style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.8rem' }}>Causa:</strong> {bo.causa || '-'}</div>
+                  <div><strong style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.8rem' }}>Falha:</strong> {bo.falha || '-'}</div>
                   <div><strong style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.8rem' }}>Descrição:</strong> {bo.descricao || '-'}</div>
                 </div>
               ) : (
@@ -327,6 +355,26 @@ export default function BoDetail() {
                   {errors.setor_responsavel && <span style={{ color: 'var(--error-color)', fontSize: '0.8rem' }}>{errors.setor_responsavel.message}</span>}
                   <SearchSelectModal label="Frete" value={freight || ''} placeholder="Selecione..." options={['CIF', 'FOB']} onChange={value => setValue('frete', value, { shouldValidate: true })} />
                   {errors.frete && <span style={{ color: 'var(--error-color)', fontSize: '0.8rem' }}>{errors.frete.message}</span>}
+                  <div className="form-group">
+                    <label htmlFor="custo">Custo</label>
+                    <input
+                      id="custo"
+                      type="text"
+                      inputMode="decimal"
+                      value={cost || ''}
+                      onChange={event => setValue('custo', formatCurrency(event.target.value), { shouldValidate: true })}
+                      placeholder="R$ 0,00"
+                    />
+                  </div>
+                  <SearchSelectModal label="Causa" value={cause || ''} placeholder="Selecione..." options={causeOptions} onChange={value => setValue('causa', value, { shouldValidate: true })} />
+                  <div className="form-group">
+                    <label htmlFor="falha">Falha</label>
+                    <input id="falha" type="text" {...register('falha')} />
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <input type="checkbox" {...register('procedencia')} />
+                    Procedência
+                  </label>
                   <div className="form-group">
                     <label>Descrição</label>
                     <textarea {...register('descricao')} rows={3}></textarea>
