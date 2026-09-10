@@ -16,6 +16,8 @@ export default function AdminUsers() {
   const [isEditingUser, setIsEditingUser] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [createSuccess, setCreateSuccess] = useState<string | null>(null)
+  const [shipmentInterval, setShipmentInterval] = useState('5')
+  const [isSavingShipmentInterval, setIsSavingShipmentInterval] = useState(false)
   const [newUser, setNewUser] = useState({
     username: '',
     email: '',
@@ -27,15 +29,6 @@ export default function AdminUsers() {
     can_track_bo: true,
   })
 
-  // Evitar acesso via URL
-  if (!profile?.is_admin) {
-    return <div style={{ padding: '2rem' }}>Acesso restrito a administradores.</div>
-  }
-
-  useEffect(() => {
-    fetchUsers()
-  }, [])
-
   const fetchUsers = async () => {
     setLoading(true)
     const { data, error } = await supabase
@@ -45,6 +38,54 @@ export default function AdminUsers() {
 
     if (!error && data) setUsers(data as Profile[])
     setLoading(false)
+  }
+
+  const fetchShipmentInterval = async () => {
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'shipment_check_interval_minutes')
+      .maybeSingle()
+
+    if (!error) {
+      const minutes = Number((data?.value as { minutes?: number } | null)?.minutes)
+      if (Number.isFinite(minutes)) setShipmentInterval(String(minutes))
+    }
+  }
+
+  useEffect(() => {
+    if (profile?.is_admin) {
+      void fetchUsers()
+      void fetchShipmentInterval()
+    }
+  }, [profile?.is_admin])
+
+  // Evitar acesso via URL
+  if (!profile?.is_admin) {
+    return <div style={{ padding: '2rem' }}>Acesso restrito a administradores.</div>
+  }
+
+  const saveShipmentInterval = async () => {
+    const minutes = Number(shipmentInterval)
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) {
+      setCreateError('Informe um intervalo inteiro entre 1 e 1440 minutos.')
+      return
+    }
+
+    setIsSavingShipmentInterval(true)
+    setCreateError(null)
+    const { error } = await supabase
+      .from('app_settings')
+      .update({ value: { minutes }, updated_by: profile?.id })
+      .eq('key', 'shipment_check_interval_minutes')
+
+    if (error) {
+      void logApplicationError(error, { source: 'AdminUsers.saveShipmentInterval' })
+      setCreateError(error.message)
+    } else {
+      setCreateSuccess('Intervalo de verificação atualizado.')
+    }
+    setIsSavingShipmentInterval(false)
   }
 
   const handleToggle = async (userId: string, field: keyof Profile, currentValue: boolean) => {
@@ -238,6 +279,24 @@ export default function AdminUsers() {
           </form>
         </section>
       </div>}
+
+      <div style={{ background: 'var(--surface-color)', padding: '1.5rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--surface-border)', boxShadow: 'var(--shadow-sm)' }}>
+        <div className="dashboard-panel-heading">
+          <div>
+            <h2>Verificação de embarque</h2>
+            <p>Define a frequência da consulta automática à API de embarque.</p>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '1rem', flexWrap: 'wrap' }}>
+          <div className="form-group">
+            <label htmlFor="shipment-interval">Intervalo (minutos)</label>
+            <input id="shipment-interval" type="number" min="1" max="1440" step="1" value={shipmentInterval} onChange={event => setShipmentInterval(event.target.value)} />
+          </div>
+          <button className="primary-action" type="button" onClick={saveShipmentInterval} disabled={isSavingShipmentInterval}>
+            {isSavingShipmentInterval ? 'Salvando...' : 'Salvar intervalo'}
+          </button>
+        </div>
+      </div>
 
       <div style={{ background: 'var(--surface-color)', padding: '1.5rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--surface-border)', boxShadow: 'var(--shadow-sm)' }}>
         <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>

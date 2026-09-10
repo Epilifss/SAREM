@@ -164,6 +164,10 @@ export default function BoDetail() {
 
   const handleUpdate = async (data: EditFormData) => {
     if (!profile) return
+    if (bo?.status === 'Embarcado') {
+      showError(new Error('BOs embarcados não podem ser editados.'), 'BoDetail.handleUpdate')
+      return
+    }
     setIsSaving(true)
 
     const { error: boError } = await supabase
@@ -216,26 +220,6 @@ export default function BoDetail() {
     setIsSaving(false)
   }
 
-  const handleStatusChange = async (newStatus: string) => {
-    if (!profile?.can_edit_bo || !bo) return
-    if (!window.confirm(`Mudar status para ${newStatus}?`)) return
-    
-    const { error } = await supabase
-      .from('bo_records')
-      .update({ 
-        status: newStatus,
-        user_edit: profile.id 
-      })
-      .eq('id', id)
-
-    if (!error) {
-      setBo(prev => prev ? { ...prev, status: newStatus } : null)
-      fetchHistory()
-    } else {
-      showError(error, 'BoDetail.handleStatusChange')
-    }
-  }
-
   const handleDelete = async () => {
     if (!profile?.can_delete_bo) return
 
@@ -285,21 +269,6 @@ export default function BoDetail() {
         </div>
         
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
-          {profile?.can_edit_bo && (
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Mudar Status:</span>
-              <select 
-                value={bo.status || ''} 
-                onChange={(e) => handleStatusChange(e.target.value)}
-                style={{ padding: '0.5rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1' }}
-              >
-                <option value="Em Andamento">Em Andamento</option>
-                <option value="Aguardando Aprovação">Aguardando Aprovação</option>
-                <option value="Aguardando Coleta">Aguardando Coleta</option>
-                <option value="Embarcado">Embarcado</option>
-              </select>
-            </div>
-          )}
           {profile?.can_delete_bo && (
             <button onClick={() => setIsDeleteModalOpen(true)} style={{ background: 'transparent', color: 'var(--error-color)', border: 'none', cursor: 'pointer', fontSize: '0.875rem', marginTop: '0.5rem' }}>
               Excluir BO
@@ -331,7 +300,7 @@ export default function BoDetail() {
             <div style={{ background: 'var(--surface-color)', padding: '1.5rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--surface-border)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
                 <h3 style={{ color: 'var(--text-secondary)' }}>Dados do SAREM</h3>
-                {profile?.can_edit_bo && !isEditing && (
+                {profile?.can_edit_bo && bo.status !== 'Embarcado' && !isEditing && (
                   <button onClick={() => { setItemEdits(Object.fromEntries(items.map(item => [item.id, { motivo: item.motivo || '' }]))); setIsEditing(true) }} style={{ background: 'transparent', color: 'var(--primary-color)', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Editar</button>
                 )}
               </div>
