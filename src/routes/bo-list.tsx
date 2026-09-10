@@ -5,6 +5,7 @@ import type { BoRecord } from '../types'
 import { DataTable } from '../components/ui/DataTable'
 import { useAuth } from '../providers/AuthProvider'
 import { logApplicationError } from '../services/errorLogger'
+import { formatDate } from '../lib/date'
 
 export default function BoList() {
   const [bos, setBos] = useState<BoRecord[]>([])
@@ -97,7 +98,7 @@ export default function BoList() {
     },
     { 
       header: 'Emissão Totvs', 
-      accessor: (row: BoRecord) => row.emissao_totvs ? new Date(row.emissao_totvs).toLocaleDateString() : '-' 
+      accessor: (row: BoRecord) => formatDate(row.emissao_totvs)
     },
   ]
 

@@ -9,6 +9,7 @@ import { useAuth } from '../providers/AuthProvider'
 import { SearchSelectModal } from '../components/ui/SearchSelectModal'
 import { ErrorModal } from '../components/ui/ErrorModal'
 import { logApplicationError } from '../services/errorLogger'
+import { formatDate } from '../lib/date'
 
 const editSchema = z.object({
   tipo_ocorrencia: z.string().min(1, 'Selecione o tipo'),
@@ -363,8 +364,8 @@ export default function BoDetail() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 <div><strong style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.8rem' }}>OP:</strong> {bo.op || '-'}</div>
                 <div><strong style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.8rem' }}>Filial:</strong> {bo.filial}</div>
-                <div><strong style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.8rem' }}>Emissão Totvs:</strong> {bo.emissao_totvs ? new Date(bo.emissao_totvs).toLocaleDateString() : '-'}</div>
-                <div><strong style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.8rem' }}>Prev. Embarque:</strong> {bo.previsao_embarque ? new Date(bo.previsao_embarque).toLocaleDateString() : '-'}</div>
+                <div><strong style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.8rem' }}>Emissão Totvs:</strong> {formatDate(bo.emissao_totvs)}</div>
+                <div><strong style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.8rem' }}>Prev. Embarque:</strong> {formatDate(bo.previsao_embarque)}</div>
               </div>
             </div>
           </div>

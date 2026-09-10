@@ -5,6 +5,7 @@ import { useAuth } from '../providers/AuthProvider'
 import type { BoRecord } from '../types'
 import logoSarem from '../img/logo_sarem.svg'
 import logoSaremPng from '../img/SAREM.png'
+import { toComparableDate } from '../lib/date'
 
 type ReportItem = { bo_ref: string; cod: string | null; desc: string | null; motivo: string | null }
 type ReportPreset = 'all' | 'open' | 'progress' | 'closed' | 'products'
@@ -134,8 +135,9 @@ export default function Reports() {
         const matchesModule = !module || record.modulo === module
         const matchesSector = !sector || record.setor_responsavel === sector
         const matchesCause = !cause || record.causa === cause
-        const matchesStart = !dateStart || (record.emissao_totvs || '') >= dateStart
-        const matchesEnd = !dateEnd || (record.emissao_totvs || '') <= dateEnd
+        const comparableEmissionDate = toComparableDate(record.emissao_totvs)
+        const matchesStart = !dateStart || (comparableEmissionDate !== '' && comparableEmissionDate >= dateStart)
+        const matchesEnd = !dateEnd || (comparableEmissionDate !== '' && comparableEmissionDate <= dateEnd)
         return matchesPreset && matchesTerm && matchesStatus && matchesModule && matchesSector && matchesCause && matchesStart && matchesEnd
       })
       const filteredItems = preset === 'products' ? items.filter(item => filtered.some(record => record.bo_number.trim() === item.bo_ref.trim())) : items
