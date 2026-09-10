@@ -18,21 +18,29 @@ export default function BoList() {
   const [filterStatus, setFilterStatus] = useState('')
   const [filterDateStart, setFilterDateStart] = useState('')
   const [filterDateEnd, setFilterDateEnd] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+  const [totalCount, setTotalCount] = useState(0)
 
   useEffect(() => {
     if (profile) fetchBOs()
   }, [profile])
 
-  const fetchBOs = async (e?: React.FormEvent, filters = { filterTerm, filterStatus, filterDateStart, filterDateEnd }) => {
+  const fetchBOs = async (
+    e?: React.FormEvent,
+    filters = { filterTerm, filterStatus, filterDateStart, filterDateEnd },
+    page = currentPage,
+    size = pageSize,
+  ) => {
     if (e) e.preventDefault()
     setLoading(true)
 
     let query = supabase
       .from('bo_records')
-      .select('*')
+      .select('*', { count: 'exact' })
       .or('d_e_l_e_t_.neq.*,d_e_l_e_t_.is.null')
       .order('created_at', { ascending: false })
-      .limit(100)
+      .range((page - 1) * size, page * size - 1)
 
     if (profile && profile.module !== 'Todos' && !profile.is_admin) {
       query = query.eq('modulo', profile.module)
@@ -55,13 +63,14 @@ export default function BoList() {
       query = query.or(`bo_number.ilike.%${term}%,op.ilike.%${term}%,loja.ilike.%${term}%`)
     }
 
-    const { data, error } = await query
+    const { data, error, count } = await query
 
     if (error) {
       console.error('Error fetching BOs:', error.message)
       void logApplicationError(error, { source: 'BoList.fetchBOs' })
     } else {
       setBos(data as BoRecord[])
+      setTotalCount(count || 0)
       const { data: itemRows, error: itemsError } = await supabase
         .from('bo_itens')
         .select('bo_ref')
@@ -79,6 +88,17 @@ export default function BoList() {
       }
     }
     setLoading(false)
+  }
+
+  const applyFilters = (filters: { filterTerm: string; filterStatus: string; filterDateStart: string; filterDateEnd: string }) => {
+    setCurrentPage(1)
+    void fetchBOs(undefined, filters, 1)
+  }
+
+  const changePage = (page: number) => {
+    if (page < 1 || page > Math.ceil(totalCount / pageSize)) return
+    setCurrentPage(page)
+    void fetchBOs(undefined, undefined, page)
   }
 
   const columns = [
@@ -135,7 +155,7 @@ export default function BoList() {
               onChange={e => {
                 const value = e.target.value
                 setFilterTerm(value)
-                fetchBOs(undefined, { filterTerm: value, filterStatus, filterDateStart, filterDateEnd })
+                applyFilters({ filterTerm: value, filterStatus, filterDateStart, filterDateEnd })
               }}
               style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1' }}
             />
@@ -148,7 +168,7 @@ export default function BoList() {
               onChange={e => {
                 const value = e.target.value
                 setFilterStatus(value)
-                fetchBOs(undefined, { filterTerm, filterStatus: value, filterDateStart, filterDateEnd })
+                applyFilters({ filterTerm, filterStatus: value, filterDateStart, filterDateEnd })
               }}
               style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1' }}
             >
@@ -168,7 +188,7 @@ export default function BoList() {
               onChange={e => {
                 const value = e.target.value
                 setFilterDateStart(value)
-                fetchBOs(undefined, { filterTerm, filterStatus, filterDateStart: value, filterDateEnd })
+                applyFilters({ filterTerm, filterStatus, filterDateStart: value, filterDateEnd })
               }}
               style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1' }}
             />
@@ -182,7 +202,7 @@ export default function BoList() {
               onChange={e => {
                 const value = e.target.value
                 setFilterDateEnd(value)
-                fetchBOs(undefined, { filterTerm, filterStatus, filterDateStart, filterDateEnd: value })
+                applyFilters({ filterTerm, filterStatus, filterDateStart, filterDateEnd: value })
               }}
               style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1' }}
             />
@@ -204,6 +224,51 @@ export default function BoList() {
           isLoading={loading} 
           onRowClick={(row) => navigate(`/bos/${row.id}`)}
         />
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', color: 'var(--text-secondary)' }}>
+        <span>
+          {totalCount === 0
+            ? 'Nenhum registro'
+            : `Mostrando ${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, totalCount)} de ${totalCount} BOs`}
+        </span>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <label htmlFor="bo-page-size">BOs por página</label>
+          <select
+            id="bo-page-size"
+            value={pageSize}
+            onChange={e => {
+              const value = Number(e.target.value)
+              setPageSize(value)
+              setCurrentPage(1)
+              void fetchBOs(undefined, undefined, 1, value)
+            }}
+            style={{ padding: '0.5rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1' }}
+          >
+            <option value={20}>20</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+
+          <button
+            type="button"
+            onClick={() => changePage(currentPage - 1)}
+            disabled={currentPage === 1 || loading}
+            style={{ padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1', cursor: currentPage === 1 || loading ? 'not-allowed' : 'pointer' }}
+          >
+            Anterior
+          </button>
+          <span>Página {currentPage} de {Math.max(1, Math.ceil(totalCount / pageSize))}</span>
+          <button
+            type="button"
+            onClick={() => changePage(currentPage + 1)}
+            disabled={currentPage >= Math.ceil(totalCount / pageSize) || loading}
+            style={{ padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1', cursor: currentPage >= Math.ceil(totalCount / pageSize) || loading ? 'not-allowed' : 'pointer' }}
+          >
+            Próxima
+          </button>
+        </div>
       </div>
     </div>
   )
