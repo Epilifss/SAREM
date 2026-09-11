@@ -62,7 +62,7 @@ function mapBO(bo: ProtheusApiBO): ProtheusBO {
 export const protheusService = {
   
   async searchBOs(termo = ''): Promise<ProtheusBO[]> {
-    const response = await fetch(API_URL)
+    const response = await fetch(API_URL, { cache: 'no-store' })
     if (!response.ok) {
       throw new Error(`Erro ao consultar o Protheus (${response.status})`)
     }
@@ -86,7 +86,7 @@ export const protheusService = {
   },
 
   async getBOItems(boNumber: string): Promise<ProtheusBOItem[]> {
-    const response = await fetch(API_URL)
+    const response = await fetch(API_URL, { cache: 'no-store' })
     if (!response.ok) throw new Error(`Erro ao consultar itens no Protheus (${response.status})`)
     const payload = await response.json() as ProtheusApiBO | ProtheusApiBO[]
     const apiBos = Array.isArray(payload) ? payload : [payload]
@@ -95,7 +95,7 @@ export const protheusService = {
   },
 
   async getBODetails(boNumber: string): Promise<ProtheusBO | null> {
-    const response = await fetch(API_URL)
+    const response = await fetch(API_URL, { cache: 'no-store' })
     if (!response.ok) throw new Error(`Erro ao consultar detalhes no Protheus (${response.status})`)
     const payload = await response.json() as ProtheusApiBO | ProtheusApiBO[]
     const apiBos = Array.isArray(payload) ? payload : [payload]

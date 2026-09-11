@@ -6,7 +6,10 @@ server {
     index index.html;
 
     location /api/protheus/bos {
-        proxy_pass http://api.tidelli.com.br/pedidos/bos;
+        proxy_pass https://api.tidelli.com.br/pedidos/bos;
+        proxy_redirect off;
+        proxy_ssl_server_name on;
+        proxy_ssl_name api.tidelli.com.br;
         proxy_set_header X-API-Key "${PROTHEUS_API_KEY}";
         proxy_set_header Host api.tidelli.com.br;
     }

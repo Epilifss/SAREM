@@ -31,7 +31,7 @@ Deno.serve(async (request) => {
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey)
-  const apiUrl = (Deno.env.get('PROTHEUS_API_URL') ?? 'http://api.tidelli.com.br').replace(/\/$/, '')
+  const apiUrl = (Deno.env.get('PROTHEUS_API_URL') ?? 'https://api.tidelli.com.br').replace(/\/$/, '')
   const apiKey = Deno.env.get('PROTHEUS_API_KEY')
 
   const { data: bos, error: queryError } = await supabase

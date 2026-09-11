@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
       allowedHosts: ["api.tidelli.com.br"],
       proxy: {
         '/api/protheus/bos': {
-          target: 'http://api.tidelli.com.br',
+          target: 'https://api.tidelli.com.br',
           changeOrigin: true,
           rewrite: () => '/pedidos/bos',
           headers: {
