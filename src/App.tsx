@@ -37,7 +37,8 @@ function ShipmentSyncScheduler() {
       const minutes = Number((data?.value as { minutes?: number } | null)?.minutes)
       const intervalMs = Math.max(1, Number.isFinite(minutes) ? minutes : 5) * 60 * 1000
 
-      await supabase.functions.invoke('sync-embarked-bos', { body: {} })
+      const { error: syncError } = await supabase.functions.invoke('sync-embarked-bos', { body: {} })
+      if (syncError) console.warn('Sincronização de embarques indisponível:', syncError.message)
       if (!cancelled) timer = window.setTimeout(schedule, intervalMs)
     }
 

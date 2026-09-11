@@ -1,5 +1,27 @@
 # React + TypeScript + Vite
 
+## Deploy em produção
+
+As Edge Functions são executadas pelo stack local do Supabase. Depois de atualizar o repositório no servidor, recrie o stack para que a função `sync-embarked-bos` seja registrada no runtime:
+
+```powershell
+supabase stop
+supabase start
+supabase migration up
+docker compose up -d --build
+```
+
+Valide a rota antes de abrir a aplicação. Uma resposta `200` para `OPTIONS` confirma que a função está publicada no gateway:
+
+```powershell
+Invoke-WebRequest `
+  -Uri 'http://127.0.0.1:56001/functions/v1/sync-embarked-bos' `
+  -Method Options `
+  -UseBasicParsing
+```
+
+O arquivo `supabase/functions/.env` deve existir no servidor com as variáveis necessárias para a função. Ele não deve ser versionado.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
