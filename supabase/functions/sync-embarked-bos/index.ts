@@ -83,7 +83,7 @@ Deno.serve(async (request) => {
       }
 
       const shipment = await response.json() as ShipmentResponse
-      if (shipment.embarcado !== true) continue
+      if (shipment.embarcado !== true) return
 
       const { error: updateError } = await supabase
         .from('bo_records')
