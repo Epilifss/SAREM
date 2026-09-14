@@ -9,7 +9,15 @@ services:
     environment:
       PROTHEUS_API_KEY: ${PROTHEUS_API_KEY}
       NGINX_ENVSUBST_VARS: '$PROTHEUS_API_KEY'
+    networks:
+      - default
+      - supabase
     container_name: sarem_web
     ports:
       - "82:82"
     restart: unless-stopped
+
+networks:
+  supabase:
+    external: true
+    name: supabase_network_SAREM
