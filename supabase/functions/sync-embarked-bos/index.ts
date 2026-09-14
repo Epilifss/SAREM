@@ -4,6 +4,14 @@ type ShipmentResponse = {
   embarcado?: boolean
 }
 
+type BoRecord = {
+  id: number
+  bo_number: string
+  op: string | null
+  filial: string | null
+  status: string | null
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -39,6 +47,8 @@ Deno.serve(async (request) => {
     .select('id, bo_number, op, filial, status')
     .neq('status', 'Embarcado')
     .or('d_e_l_e_t_.neq.*,d_e_l_e_t_.is.null')
+    .order('id', { ascending: true })
+    .limit(Number(Deno.env.get('SHIPMENT_SYNC_BATCH_SIZE') ?? 50))
 
   if (queryError) {
     return new Response(JSON.stringify({ error: queryError.message }), {
@@ -51,8 +61,12 @@ Deno.serve(async (request) => {
   let updated = 0
   const errors: string[] = []
 
-  for (const bo of bos ?? []) {
-    if (!bo.op || !bo.filial) continue
+  const records = (bos ?? []) as BoRecord[]
+  const concurrency = 5
+  for (let index = 0; index < records.length; index += concurrency) {
+    const batch = records.slice(index, index + concurrency)
+    await Promise.all(batch.map(async bo => {
+    if (!bo.op || !bo.filial) return
     checked += 1
 
     try {
@@ -60,6 +74,7 @@ Deno.serve(async (request) => {
       url.searchParams.set('filial', String(bo.filial).trim())
       const response = await fetch(url, {
         redirect: 'manual',
+        signal: AbortSignal.timeout(5000),
         headers: apiKey ? { 'X-API-Key': apiKey } : undefined,
       })
 
@@ -81,6 +96,7 @@ Deno.serve(async (request) => {
     } catch (error) {
       errors.push(`${bo.bo_number}: ${error instanceof Error ? error.message : String(error)}`)
     }
+    }))
   }
 
   return new Response(JSON.stringify({ checked, updated, errors }), {

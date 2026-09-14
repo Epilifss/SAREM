@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import ExcelJS from 'exceljs'
 import { useAuth } from '../providers/AuthProvider'
 import { supabase } from '../lib/supabase'
+import { loadBoItemsByReferences } from '../lib/boItems'
 import logoSarem from '../img/logo_sarem.svg'
 import logoSaremPng from '../img/SAREM.png'
 
@@ -341,13 +342,12 @@ export default function Dashboard() {
         if (boNumbers.length === 0) {
           setItems([])
         } else {
-          const { data: itemData, error: itemError } = await supabase
-            .from('bo_itens')
-            .select('motivo, bo_ref, cod, desc')
-            .in('bo_ref', boNumbers)
-
-          if (itemError) setError(itemError.message)
-          setItems((itemData as DashboardItem[]) || [])
+          try {
+            setItems(await loadBoItemsByReferences(boNumbers))
+          } catch (itemError) {
+            setError(itemError instanceof Error ? itemError.message : String(itemError))
+            setItems([])
+          }
         }
       }
       setLoading(false)
