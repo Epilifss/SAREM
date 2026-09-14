@@ -224,14 +224,7 @@ export default function BoDetail() {
   const handleDelete = async () => {
     if (!profile?.can_delete_bo) return
 
-    const { error } = await supabase
-      .from('bo_records')
-      .update({ 
-        d_e_l_e_t_: '*',
-        user_delet: profile.id,
-        deleted_at: new Date().toISOString()
-      })
-      .eq('id', id)
+    const { error } = await supabase.rpc('soft_delete_bo', { p_id: Number(id) })
     
     if (!error) {
       setIsDeleteModalOpen(false)
