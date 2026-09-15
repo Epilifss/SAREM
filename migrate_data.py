@@ -50,7 +50,7 @@ def migrate_tables():
 
     # Mapeamento: "src" (Nome no SQL Server) -> "dest" (Nome no Supabase)
     tables_to_migrate = [
-        {"src": "bo_records", "dest": "bo_records", "key_column": "bo_number", "deduplicate": True},
+        {"src": "bo_records", "dest": "bo_records", "key_column": "bo_number", "deduplicate": False},
         {"src": "BO_ITENS", "dest": "bo_itens", "key_column": "bo_ref", "deduplicate": False}
     ]
 
@@ -99,6 +99,10 @@ def migrate_tables():
                 df = df.drop(columns=['id'])
 
             with dest_engine.begin() as connection:
+                if dest_table == "bo_records":
+                    connection.execute(text('ALTER TABLE public.bo_records DROP CONSTRAINT IF EXISTS bo_records_bo_number_key'))
+                    connection.execute(text('DROP INDEX IF EXISTS public.bo_records_bo_number_key'))
+
                 connection.execute(text(f'DELETE FROM public."{dest_table}"'))
                 df.to_sql(
                     name=dest_table,
