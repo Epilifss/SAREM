@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import ExcelJS from 'exceljs'
 import { supabase } from '../lib/supabase'
+import { loadBoItemsByReferences } from '../lib/boItems'
 import { useAuth } from '../providers/AuthProvider'
 import type { BoRecord } from '../types'
 import logoSarem from '../img/logo_sarem.svg'
@@ -112,9 +113,7 @@ export default function Reports() {
       setRecords(loadedRecords)
       const boNumbers = loadedRecords.map(record => record.bo_number)
       if (boNumbers.length) {
-        const { data: itemData, error: itemError } = await supabase.from('bo_itens').select('bo_ref, cod, desc, motivo').in('bo_ref', boNumbers)
-        if (itemError) throw itemError
-        setItems((itemData || []) as ReportItem[])
+        setItems(await loadBoItemsByReferences(boNumbers))
       }
     }
 

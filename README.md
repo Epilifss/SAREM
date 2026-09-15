@@ -22,6 +22,10 @@ Invoke-WebRequest `
 
 O arquivo `supabase/functions/.env` deve existir no servidor com as variáveis necessárias para a função. Ele não deve ser versionado.
 
+O build de produção deve usar `VITE_SUPABASE_URL=https://sarem.tidelli.com.br`. O Nginx encaminha as rotas `/auth`, `/rest`, `/realtime`, `/storage` e `/functions` pela rede Docker interna do Supabase, portanto o endereço privado e a porta `56001` não são enviados ao navegador.
+
+Depois de validar o acesso pelo domínio, bloqueie no firewall externo as portas `56001`, `56002`, `56003`, `56004`, `56007` e `56009`. O container web acessa o gateway pela rede Docker `supabase_network_SAREM`; essas portas não precisam ficar expostas fora do servidor.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
