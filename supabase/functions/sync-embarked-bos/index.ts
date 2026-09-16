@@ -42,13 +42,37 @@ Deno.serve(async (request) => {
   const apiUrl = (Deno.env.get('PROTHEUS_API_URL') ?? 'https://api.tidelli.com.br').replace(/\/$/, '')
   const apiKey = Deno.env.get('PROTHEUS_API_KEY')
 
+  const batchSize = Number(Deno.env.get('SHIPMENT_SYNC_BATCH_SIZE') ?? 50)
+
+  // Fetch all unembarked IDs to pick a random batch and prevent queue starvation
+  const { data: allIds, error: idsError } = await supabase
+    .from('bo_records')
+    .select('id')
+    .neq('status', 'Embarcado')
+    .or('d_e_l_e_t_.neq.*,d_e_l_e_t_.is.null')
+
+  if (idsError) {
+    return new Response(JSON.stringify({ error: idsError.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+
+  const ids = (allIds || []).map((r: { id: number }) => r.id)
+  
+  // Randomly select a batch to ensure all items are eventually checked
+  const selectedIds = ids.sort(() => 0.5 - Math.random()).slice(0, batchSize)
+
+  if (selectedIds.length === 0) {
+    return new Response(JSON.stringify({ checked: 0, updated: 0, errors: [] }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+
   const { data: bos, error: queryError } = await supabase
     .from('bo_records')
     .select('id, bo_number, op, filial, status')
-    .neq('status', 'Embarcado')
-    .or('d_e_l_e_t_.neq.*,d_e_l_e_t_.is.null')
-    .order('id', { ascending: true })
-    .limit(Number(Deno.env.get('SHIPMENT_SYNC_BATCH_SIZE') ?? 50))
+    .in('id', selectedIds)
 
   if (queryError) {
     return new Response(JSON.stringify({ error: queryError.message }), {
